@@ -112,6 +112,7 @@ def main(opts):
     if not opts.use_audio:
         opts.audio_path = '' #### delete audio path for 2m exp
  
+    #加载数据
     data_type = opts.data_type if opts.data_type else 'video_downstream'
     txt_mapper = TxtMapperForOpenEndedVQA(opts.txt_path, opts.answer_candidate_path, opts.max_txt_len)
     video_mapper_train = VideoMapper(opts.video_path, opts.video_cfg, data_type,is_training=True)
@@ -126,6 +127,7 @@ def main(opts):
     test_dataset = OpenEndedVQADataset(opts.test_ids_path, txt_mapper, video_mapper_test, audio_mapper, training=False)
     test_loader = build_dataloader(test_dataset, openendedvqa_collate, False, opts)
 
+    #加载模型
     if opts.checkpoint:
         checkpoint = torch.load(opts.checkpoint, map_location = device)
     elif opts.pretrain_dir:
@@ -165,7 +167,7 @@ def main(opts):
     else:
         checkpoint = {}
 
-    
+    #
     opts.model_cfg['answer_num'] = len(json.load(open(opts.answer_candidate_path)))
     if opts.multimodal_norm_mode:
         opts.model_cfg['multimodal_norm_mode'] = opts.multimodal_norm_mode
@@ -193,6 +195,7 @@ def main(opts):
     # make sure every process has same model parameters in the beginning
     broadcast_tensors([p.data for p in model.parameters()], 0)
     #set_dropout(model, opts.dropout)
+
 
     # Prepare optimizer
     optimizer = build_optimizer_for_VQA(model, opts)
@@ -235,7 +238,7 @@ def main(opts):
     if opts.zero_shot:
         return 
 
-
+    #训练模型
     while True:
         
         for step, batch in enumerate(train_dataloader):

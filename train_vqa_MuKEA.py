@@ -108,6 +108,8 @@ def cal_acc(ground_truth, preds, return_id = False):
 
 
 def train():
+
+    #加载数据、模型
     if not args.pretrain:
         train_dataset = KgDataset(val=False)
         train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True,
@@ -132,7 +134,7 @@ def train():
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         model = torch.nn.DataParallel(model)
 
-
+    #设置优化器、训练步数、损失函数
     optimizer = optim.AdamW(model.parameters(), lr=1e-4)
     
     # '2' is Gpu NUMS 
@@ -146,6 +148,7 @@ def train():
     criterion_mse = nn.MSELoss()
     criterion_graph = ContrastiveLoss(measure='dot', margin=1.0, max_violation=False)
 
+    #判断是否加载模型
     if args.load_pthpath == "":
         start_epoch = 0
     else:
@@ -155,6 +158,7 @@ def train():
 
         model.module.load_state_dict(torch.load(args.load_pthpath))
 
+    #模型训练
     best_acc = 0
     best_epoch = 0
     best_acc_t = 0
@@ -261,6 +265,8 @@ def train():
             torch.save(model.module.state_dict(), args.model_dir + 'model_for_epoch_%d.pth' % epoch)
         else:
             torch.save(model.state_dict(), args.model_dir + 'model_for_epoch_%d.pth' % epoch)
+
+        #模型评估
         if args.validate:
             model.eval()
             answers = []  # [batch_answers,...]
