@@ -110,7 +110,7 @@ def openendedvqa_collate(inputs):
     audio_spectrograms_3m = []
     answers_3m = []
     for i in range(len(audio_spectrograms)):
-        if audio_spectrograms[i] !='woaudio':
+        if audio_spectrograms[i] is not None:
             ids_3m.append(ids[i])
             question_tokens_3m.append(question_tokens[i])
             video_pixels_3m.append(video_pixels[i])

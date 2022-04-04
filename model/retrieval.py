@@ -37,7 +37,7 @@ class OPTForVideoTextRetrievalFast(OPTForPretraining):
             txt_output_unmasked, txt_position_embedding, attn_mask_txt, txt_labels = \
                     self.opt.forward_txt_encoder(txt_tokens, perform_mask=False)
 
-            video_output_unmasked, video_position_embedding, video_mask_indicator = \
+            video_output_unmasked, video_position_embedding, video_mask_indicator, video_labels = \
                     self.opt.forward_video_encoder(video_pixels, perform_mask=False)
 
             audio_output_unmasked, audio_position_embedding = \
@@ -50,7 +50,7 @@ class OPTForVideoTextRetrievalFast(OPTForPretraining):
                 txt_output_unmasked_2m, txt_position_embedding_2m, attn_mask_txt_2m, txt_labels = \
                         self.opt.forward_txt_encoder(txt_tokens, perform_mask=False)
 
-                video_output_unmasked_2m, video_position_embedding_2m, video_mask_indicator = \
+                video_output_unmasked_2m, video_position_embedding_2m, video_mask_indicator, video_labels = \
                         self.opt.forward_video_encoder(video_pixels, perform_mask=False)
 
                 txt_output_unmasked = torch.cat((txt_output_unmasked, txt_output_unmasked_2m),dim = 0)
@@ -67,7 +67,7 @@ class OPTForVideoTextRetrievalFast(OPTForPretraining):
             txt_output_unmasked, txt_position_embedding, attn_mask_txt, txt_labels = \
                         self.opt.forward_txt_encoder(txt_tokens, perform_mask=False)
 
-            video_output_unmasked, video_position_embedding, video_mask_indicator = \
+            video_output_unmasked, video_position_embedding, video_mask_indicator, video_labels = \
                         self.opt.forward_video_encoder(video_pixels, perform_mask=False)
 
         # if self.use_multimodal_encoder:
@@ -109,8 +109,8 @@ class OPTForVideoTextRetrievalFast(OPTForPretraining):
 
         if sample_num_3m > 0:
             cls_token_a = audio_output_unmasked[:,0]
-            #feat_a = self.contra_head_a(cls_token_a)
-            #feat_a = F.normalize(feat_a,dim=-1)
+            feat_a = self.contra_head_a(cls_token_a)
+            feat_a = F.normalize(feat_a,dim=-1)
             feat_va = self.contra_head_va_fuse(torch.cat([cls_token_v[:sample_num_3m], cls_token_a],dim=-1))
             feat_va = F.normalize(feat_va,dim=-1)
 
@@ -145,7 +145,7 @@ class OPTForVideoTextRetrievalFast(OPTForPretraining):
             evaluation_dict['feat_t'] = feat_t
             evaluation_dict['feat_v'] = feat_v
             if sample_num_3m > 0:
-                #evaluation_dict['feat_a'] = feat_a
+                evaluation_dict['feat_a'] = feat_a
                 evaluation_dict['feat_va'] = feat_va
 
             return evaluation_dict

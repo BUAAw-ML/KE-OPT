@@ -24,7 +24,7 @@ import torch
 from torch import nn
 from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
 import torch.nn.functional as F
-import ipdb
+
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +121,6 @@ class MultiHeadAttention(nn.Module):
         if mask is not None:
             att_map=att_map + mask        
         att_map=F.softmax(att_map,dim=-1)
-
-
         att_map=self.dropout(att_map)
         attn_output = self.linears[-1](torch.matmul(att_map,v).transpose(1,2).contiguous().view(batch_size,-1,self.hidden_size))
         return attn_output

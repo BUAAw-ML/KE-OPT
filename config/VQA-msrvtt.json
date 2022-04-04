@@ -55,7 +55,6 @@
         "match_mode":"pair_simple",
         "pretrain_match_mode": "pair_simple",
         "reuse_embedding":true,
-        "strengthen_two":true,
         "multimodal_norm_mode":"prenorm",
         "txt_encoder_weights":"./output/pretrianed_weights/bert-base-uncased.bin",
         "video_encoder_weights":"./output/pretrianed_weights/ViT-B_16.npz",

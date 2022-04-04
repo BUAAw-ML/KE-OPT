@@ -16,9 +16,9 @@
         "std": 4.5689974,
         "frame_shift":10},
     "gradient_accumulation_steps": 1,
-    "learning_rate": 1e-05,
-    "valid_steps": 2000,
-    "num_train_steps": 40000,  
+    "learning_rate": 1e-04,
+    "valid_steps": 5000,
+    "num_train_steps": 55000,  
     "optim": "adamw",
     "betas": [
         0.9,
@@ -29,31 +29,33 @@
     "warmup_ratio": 0.1,
     "seed": 60,
     "fp16": true,
-    "n_workers": 8,
+    "n_workers": 4,
     "pin_mem": true,
     "use_validate": true,
     "data_cfg":{"train":  
-                        [{"datasets":
-                            [{"name": "audioset",
-                          "ids_path": "./datasets/audioset/train_id.json",
-                          "txt": "./datasets/audioset/txt_mapper_en.json",
-                          "video": "./datasets/audioset/frames_1fps",
-                          "audio": "./datasets/audioset/audio_22050hz",
-                          "datatype": "video"}],
-                          "task" : "visualvqvae_Three",
-                          "mix_ratio": 1,
-                          "batch_size": 64}],
+                        [
+                        {
+                            "datasets": 
+                                [   
+                                    {"name": "coco",
+                                    "ids_path": "./datasets/coco/train_id.json",
+                                    "txt": "./datasets/coco/txt_mapper.json",
+                                    "video": "./datasets/coco/train2014",
+                                    "datatype": "image"}] ,
+                            "task" : "mlmTwo_contraTwo_unimlmTwo_matchTwo",
+                            "mix_ratio": 1,
+                            "batch_size": 128
+                            
+                        }],
                 "val":                
-                    [{
-                        "name": "audioset",
-                        "ids_path": "./datasets/audioset/val_id_3000.json",
-                        "txt": "./datasets/audioset/txt_mapper_en.json",
-                        "video": "./datasets/audioset/frames_1fps",
-                        "audio": "./datasets/audioset/audio_22050hz",
-                        "datatype": "video", 
-                        "task": "visualvqvae_Three",
-                        "batch_size": 128 
-                     }]},
+                    [
+                        {"name": "coco",
+                        "ids_path": "./datasets/coco/val_id.json",
+                        "txt": "./datasets/coco/txt_mapper.json",
+                        "video": "./datasets/coco/val2014",
+                        "datatype": "image",
+                        "task": "mlmTwo_contraTwo_unimlmTwo_matchTwo",
+                        "batch_size": 128 }]},
 
     "model_cfg": {
         "hidden_size":768,
@@ -75,9 +77,7 @@
         "multimodal_norm_mode":"prenorm",
         "average_video_mode":"space",
         "average_audio_mode":"space",
-        "strengthen_two":true,
-        "mvm_target":"feat_regression", 
-        "codebook_num":8192,
+        "strengthen_two":false,
         "txt_encoder_weights":"./output/pretrianed_weights/bert-base-uncased.bin",
         "video_encoder_weights":"./output/pretrianed_weights/ViT-B_16.npz",
         "audio_encoder_weights":"./output/pretrianed_weights/ViT-B_32.npz"}}

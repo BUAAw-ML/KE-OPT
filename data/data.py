@@ -11,7 +11,6 @@ import torch
 from torch.utils.data import Dataset
 import horovod.torch as hvd
 from torchvision.transforms.transforms import *
-from .auto_augment_woinversion import *
 from torchvision import transforms
 import random
 from os.path import join 
@@ -21,11 +20,10 @@ import torchaudio
 from PIL import Image
 from utils.logger import LOGGER
 import ipdb
-import matplotlib.pyplot as plt
+
 import string 
-import time
-from typing import List, Tuple, Optional, Dict
-from torch import Tensor
+
+
 punctuation = string.punctuation
 
 
@@ -54,36 +52,20 @@ class TxtMapper(object):
 
             self.punctuations = string.punctuation
 
-    def __getitem__(self, id_, return_all=False):
+    def __getitem__(self, id_):
         
 
         text = self.json_dict[id_]
 
         if isinstance(text,list):
-            if not return_all:
-                text = random.choice(text)
-                output = self.get_single_txt(text)
-            else:
-                output=[]
-                for i in text:
-                    output.append(self.get_single_txt(i))
-                
+            text = random.choice(text)
 
-
-        else:
-            output = self.get_single_txt(text)
-        
-        return output
-
-
-
-    def get_single_txt(self,text):
         text = self.clean(text) 
 
         txt_tokens = self.tokenize(text)
 
         output =self.get_padded_tokens(txt_tokens)
-
+        
         return output
 
     def get_padded_tokens(self,txt_tokens):
@@ -133,55 +115,7 @@ class VideoMapper(object):
         self.frame_syncaug = True
         self.datatype = data_type
         #### 'resize and crop like swinbert' or 'padding and resize like violet'
-        
-        if self.augmentation == 'woaug':
-            if is_training:
-                self.transforms = transforms.Compose([Resize((self.resolution,self.resolution)),
-                                                    RandomHorizontalFlip(),
-                                                    Normalize(self.mean,self.std)])
-            else:
-                self.transforms = transforms.Compose([Resize((self.resolution,self.resolution)),
-                                                    Normalize(self.mean,self.std)])
-        
-        elif self.augmentation == 'randaug':
-            if is_training:
-                self.transforms = transforms.Compose([Resize((self.resolution,self.resolution)),
-                                                    ToPILImage(),
-                                                    AutoAugment(),
-                                                    ToTensor(),
-                                                    Normalize(self.mean,self.std)])
-
-            else:
-                self.transforms = transforms.Compose([Resize((self.resolution,self.resolution)),
-                                                    Normalize(self.mean,self.std)])
-
-
-        elif self.augmentation == 'randomresizedcrop_and_flip_ufo':
-       
-            if is_training:
-
-                self.transforms = transforms.Compose([RandomResizedCrop(self.resolution, [0.8,1.0],[1.0,1.0]),
-                                                    RandomHorizontalFlip(),
-                                                    Normalize(self.mean,self.std)])
-            else:
-                self.transforms = transforms.Compose([Resize(self.resolution),
-                                    CenterCrop(self.resolution),
-                                    Normalize(self.mean,self.std)])
-
-        elif self.augmentation == 'imagenet':
-       
-            if is_training:
-
-                self.transforms = transforms.Compose([RandomResizedCrop(self.resolution, [0.8,1.0],[1.0,1.0]),
-                                                    ColorJitter(0.4, 0.4, 0.4),
-                                                    RandomHorizontalFlip(),
-                                                    Normalize(self.mean,self.std)])
-            else:
-                self.transforms = transforms.Compose([Resize(self.resolution),
-                                    CenterCrop(self.resolution),
-                                    Normalize(self.mean,self.std)])
-
-        elif self.augmentation == 'resize_and_flip_and_crop':
+        if self.augmentation == 'resize_and_flip_and_crop':
             if is_training:
                 self.transforms = transforms.Compose([Resize(self.resolution),
                                                     RandomHorizontalFlip(),
@@ -266,21 +200,16 @@ class VideoMapper(object):
 
         elif self.datatype.startswith('image'):
             try:
-                img_path = os.path.join(self.video_dir, id_)
-                if not os.path.exists(img_path):
-                    img_path += '.jpg'
-                if not os.path.exists(img_path):
-                    img_path =  img_path.replace('.jpg','.JPEG')
-                img = Image.open(img_path)
-                img = img.convert('RGB')  #### convert 1-channel gray image and 4-channel CMYK image to RGB image
+                # img = Image.open(os.path.join(self.video_dir, id_))
+                img = Image.open(os.path.join(self.video_dir, id_)+'.jpg')
                 img = transforms.ToTensor()(img)
+                #### img shape may be one-channel and 4-channel (CMYK) just return none and resample again 
                 img = self.transforms(img)
-                #fake_video_pixels = img.unsqueeze(0).expand(self.sample_num,-1,-1,-1) ### copy img n times to make a static video
-                #return fake_video_pixels
-                return img.unsqueeze(0)
+                fake_video_pixels = img.unsqueeze(0).expand(self.sample_num,-1,-1,-1) ### copy img n times to make a static video
+                return fake_video_pixels
+
             except:
                 return 
-
         else:
             raise NotImplementedError()
 
@@ -340,33 +269,13 @@ class AudioMapper(object):
 
 
 if __name__ == '__main__':
-    wav_file = "/raid/datasets/audioset/audio_22050hz/MxZYmoBSTNQ_10.000_20.000.wav"
+    wav_file = "/raid/61_datasets/datasets/video_datasets/msrvtt_shchen/audio_22050hz/video9994.wav"
     waveform, sr = torchaudio.load(wav_file)
-    specgram = torchaudio.transforms.MelSpectrogram()(waveform)
-
-    print("Shape of spectrogram: {}".format(specgram.size()))
-
-    plt.figure()
-    p = plt.imshow(specgram.log2()[0,:,:].detach().numpy())
-    plt.savefig('output/mel.jpg')
-    ipdb.set_trace()
-
-
-
     waveform = waveform - waveform.mean()
     fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
-                                                  window_type='hanning', num_mel_bins=128, dither=0.0, frame_shift=10)
-
-    #fbank = (fbank +4.2677393) / 4.5689974
-    fbank.permute(1,0).unsqueeze(0)
-    toPIL = transforms.ToPILImage()
-    img = toPIL(fbank)
-    img.save('output/spectu.jpg')
-    #fbank = (fbank-min(fbank))/max(fbank)-min(fbank)
-    ipdb.set_trace()
+                                                  window_type='hanning', num_mel_bins=64, dither=0.0, frame_shift=20)
     src_length = fbank.shape[0]
     p = 1024 - src_length
-
     ipdb.set_trace()
     # cut and pad
     if p > 0:
@@ -419,7 +328,7 @@ if __name__ == '__main__':
 
 
 class TxtVideoAudioDataset(Dataset):
-    def __init__(self, ids_path, txt_mapper, video_mapper, audio_mapper, split_id=True, return_all_text=False):
+    def __init__(self, ids_path, txt_mapper, video_mapper, audio_mapper, split_id=True):
         assert isinstance(txt_mapper, TxtMapper)
         assert isinstance(video_mapper, VideoMapper)
         assert isinstance(audio_mapper, AudioMapper)
@@ -429,7 +338,6 @@ class TxtVideoAudioDataset(Dataset):
         self.ids = get_ids(ids_path, split_id)
         self.idx = list(range(len(self.ids)))
         self.dataset_name = self.video_mapper.datatype.split('_')[-1]
-        self.return_all_text = return_all_text
         
     def __len__(self):
         return len(self.ids)
@@ -437,11 +345,7 @@ class TxtVideoAudioDataset(Dataset):
     
     def __getitem__(self, i):
         id_ = self.ids[i]
-        txt_tokens = self.txt_mapper.__getitem__(id_, self.return_all_text)
-        if not self.return_all_text or not isinstance(txt_tokens,list):
-            id_txt = id_   
-        else:
-            id_txt = [id_] * len(txt_tokens)
+        txt_tokens = self.txt_mapper[id_]
         video_pixels = self.video_mapper[id_]
         audio_spectrograms = self.audio_mapper[id_]
         if video_pixels is None: ###wrong img/video and needs to resample 
@@ -452,48 +356,30 @@ class TxtVideoAudioDataset(Dataset):
             resample_idx = random.choice(self.idx)
             LOGGER.info(f'current idx {id_} from {self.dataset_name} returns wrong audio, use {resample_idx} instead.')
             return self.__getitem__(resample_idx)
-        return id_, txt_tokens, video_pixels, audio_spectrograms, id_txt
+        return id_, txt_tokens, video_pixels, audio_spectrograms
 
 def txtvideoaudio_collate(inputs):
     
-    (ids , txt_tokens, video_pixels, audio_spectrograms, id_txts) = map(list, unzip(inputs))
+    (ids , txt_tokens, video_pixels, audio_spectrograms) = map(list, unzip(inputs))
 
     ids_2m = []
     txt_tokens_2m = []
     video_pixels_2m = []
-    id_txts_2m = []
 
     ids_3m = []
     txt_tokens_3m = []
     video_pixels_3m = []
     audio_spectrograms_3m = []
-    id_txts_3m = []
-
-
 
     for i in range(len(audio_spectrograms)):
         if audio_spectrograms[i] != 'woaudio':
             ids_3m.append(ids[i])
-            if isinstance(id_txts[i],list):
-                id_txts_3m += id_txts[i]
-            else:
-                id_txts_3m.append(id_txts[i])
-            if isinstance(txt_tokens[i],list):
-                txt_tokens_3m += txt_tokens[i]
-            else:
-                txt_tokens_3m.append(txt_tokens[i])
+            txt_tokens_3m.append(txt_tokens[i])
             video_pixels_3m.append(video_pixels[i])
             audio_spectrograms_3m.append(audio_spectrograms[i])
         else:
             ids_2m.append(ids[i])
-            if isinstance(id_txts[i],list):
-                id_txts_2m += id_txts[i]
-            else:
-                id_txts_2m.append(id_txts[i])
-            if isinstance(txt_tokens[i],list):
-                txt_tokens_2m += txt_tokens[i]
-            else:
-                txt_tokens_2m.append(txt_tokens[i])
+            txt_tokens_2m.append(txt_tokens[i])
             video_pixels_2m.append(video_pixels[i])
 
     if ids_3m != []:
@@ -507,15 +393,13 @@ def txtvideoaudio_collate(inputs):
     
     batch_2m =   {'ids': ids_2m,
              'txt_tokens': txt_tokens_2m,
-             'video_pixels': video_pixels_2m,
-             'ids_txt':id_txts_2m}
+             'video_pixels': video_pixels_2m}
     
     
     batch_3m =   {'ids': ids_3m,
              'txt_tokens': txt_tokens_3m,
              'video_pixels': video_pixels_3m,
-             'audio_spectrograms': audio_spectrograms_3m,
-             'ids_txt':id_txts_3m}
+             'audio_spectrograms': audio_spectrograms_3m}
 
     batch={'batch_2m':batch_2m,
             'batch_3m':batch_3m}
@@ -561,6 +445,3 @@ class MapperGroup(object):
         else:
             audio_mapper = self.all_mappers[audio_path]
         return audio_mapper
-
-
-

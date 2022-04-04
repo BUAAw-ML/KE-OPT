@@ -2,15 +2,13 @@
 # checkpoint_step=200000
 basedir=$1
 fps_or_frames=4
-sample_num=4
+sample_num=8
 resolution=224
 patch_size=16
 learning_rate=2e-5
 ngpu=4
 train_batch_size=16
 num_train_steps=20000
-weight_decay=0.001
-use_audio='true'
 video_encoder_type='timesformer_space'
 
 
@@ -24,72 +22,26 @@ else
     video_path='./datasets/msrvtt/frames_fps'$fps_or_frames
 fi
 
-## finetune on msrvtt fast retrieval
+# ## finetune on msrvtt fast retrieval
+# CUDA_VISIBLE_DEVICES=0,1,2,3 horovodrun -np $ngpu python ./train_fast_retrieval.py \
+# --config ./config/fast-retrieval-msrvtt.json \
+# --output_dir $basedir'/fast-retrieval-msrvtt-'$prefix$fps_or_frames'_'$sample_num'-'$resolution'-'$patch_size'-lr'$learning_rate'-bs'$train_batch_size'-gpu'$ngpu'-step'$num_train_steps   \
+# --pretrain_dir $basedir \
+# --video_path $video_path  \
+# --sample_frame $sample_num \
+# --resolution $resolution \
+# --patch_size $patch_size \
+# --train_batch_size $train_batch_size \
+# --learning_rate $learning_rate \
+# --num_train_steps $num_train_steps \
+# --video_encoder_type $video_encoder_type \
+# --fp16 &
 
 
-
-
-
-
-
-## finetune on msrvtt open-ended vqa
-CUDA_VISIBLE_DEVICES=4,5,6,7 horovodrun -np $ngpu python ./train_open_ended_vqa.py \
---config ./config/VQA-msrvtt.json \
---output_dir $basedir'/openended-vqa-msrvtt-'$prefix$fps_or_frames'_'$sample_num'-'$resolution'-'$patch_size'-lr'$learning_rate'-bs'$train_batch_size'-gpu'$ngpu'-step'$num_train_steps'-wd'$weight_decay-'txtnotreducevideonotreduce'   \
---pretrain_dir $basedir \
---video_path $video_path   \
---sample_frame $sample_num \
---resolution $resolution \
---patch_size $patch_size \
---train_batch_size $train_batch_size \
---learning_rate $learning_rate \
---num_train_steps $num_train_steps \
---weight_decay $weight_decay \
---video_encoder_type $video_encoder_type \
---use_audio $use_audio \
---strengthen_two true \
---fp16  
-
-## finetune on msrvtt caption
-CUDA_VISIBLE_DEVICES=4,5,6,7 horovodrun -np $ngpu python ./train_caption.py \
---config ./config/caption-msrvtt.json \
---output_dir $basedir'/caption-msrvtt-'$prefix$fps_or_frames'_'$sample_num'-'$resolution'-'$patch_size'-lr'$learning_rate'-bs'$train_batch_size'-gpu'$ngpu'-step'$num_train_steps'-wd'$weight_decay   \
---pretrain_dir $basedir \
---video_path $video_path   \
---sample_frame $sample_num \
---resolution $resolution \
---patch_size $patch_size \
---train_batch_size $train_batch_size \
---learning_rate $learning_rate \
---num_train_steps $num_train_steps \
---weight_decay $weight_decay \
---video_encoder_type $video_encoder_type \
---use_audio $use_audio \
---strengthen_two true \
---fp16   
-
-CUDA_VISIBLE_DEVICES=4,5,6,7 horovodrun -np $ngpu python ./train_fast_retrieval.py \
---config ./config/fast-retrieval-msrvtt.json \
---output_dir $basedir'/fast-retrieval-msrvtt-'$prefix$fps_or_frames'_'$sample_num'-'$resolution'-'$patch_size'-lr-2e-5-bs'$train_batch_size'-gpu'$ngpu'-step'$num_train_steps'-wd'$weight_decay'-useaudio'$use_audio   \
---video_path $video_path  \
---sample_frame $sample_num \
---resolution $resolution \
---patch_size $patch_size \
---train_batch_size $train_batch_size \
---learning_rate 2e-5 \
---num_train_steps $num_train_steps \
---weight_decay $weight_decay \
---video_encoder_type $video_encoder_type \
---use_audio $use_audio \
---test_ids_path './datasets/msrvtt/1kAsplit_test_id.json' \
---pretrain_dir $basedir \
---fp16  
-
-
-# ### finetune on msrvtt slow retrieval
-# CUDA_VISIBLE_DEVICES=6,7 horovodrun -np $ngpu python ./train_slow_retrieval.py \
-# --config ./config/slow-retrieval-msrvtt.json \
-# --output_dir $basedir'/slow-retrieval-msrvtt'$prefix$fps_or_frames'_'$sample_num'-'$resolution'-'$patch_size'-lr'$learning_rate'-bs'$train_batch_size'-gpu'$ngpu'-step'$num_train_steps'-wd'$weight_decay   \
+# ## finetune on msrvtt caption
+# CUDA_VISIBLE_DEVICES=4,5,6,7 horovodrun -np $ngpu python ./train_caption.py \
+# --config ./config/caption-msrvtt.json \
+# --output_dir $basedir'/caption-msrvtt-'$prefix$fps_or_frames'_'$sample_num'-'$resolution'-'$patch_size'-lr'$learning_rate'-bs'$train_batch_size'-gpu'$ngpu'-step'$num_train_steps   \
 # --pretrain_dir $basedir \
 # --video_path $video_path   \
 # --sample_frame $sample_num \
@@ -98,7 +50,38 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 horovodrun -np $ngpu python ./train_fast_retrieval.
 # --train_batch_size $train_batch_size \
 # --learning_rate $learning_rate \
 # --num_train_steps $num_train_steps \
-# --weight_decay $weight_decay \
+# --video_encoder_type $video_encoder_type \
+# --fp16  
+
+# ## finetune on msrvtt open-ended vqa
+# CUDA_VISIBLE_DEVICES=0,1,2,3 horovodrun -np $ngpu python ./train_open_ended_vqa.py \
+# --config ./config/VQA-msrvtt.json \
+# --output_dir $basedir'/openended-vqa-msrvtt-'$prefix$fps_or_frames'_'$sample_num'-'$resolution'-'$patch_size'-lr'$learning_rate'-bs'$train_batch_size'-gpu'$ngpu'-step'$num_train_steps   \
+# --pretrain_dir $basedir \
+# --video_path $video_path   \
+# --sample_frame $sample_num \
+# --resolution $resolution \
+# --patch_size $patch_size \
+# --train_batch_size $train_batch_size \
+# --learning_rate $learning_rate \
+# --num_train_steps $num_train_steps \
+# --video_encoder_type $video_encoder_type \
+# --fp16  
+
+
+
+# ### finetune on msrvtt slow retrieval
+# CUDA_VISIBLE_DEVICES=4,5,6,7 horovodrun -np $ngpu python ./train_slow_retrieval.py \
+# --config ./config/slow-retrieval-msrvtt.json \
+# --output_dir $basedir'/slow-retrieval-msrvtt-1'$prefix$fps_or_frames'_'$sample_num'-'$resolution'-'$patch_size'-lr'$learning_rate'-bs'$train_batch_size'-gpu'$ngpu'-step'$num_train_steps   \
+# --pretrain_dir $basedir \
+# --video_path $video_path   \
+# --sample_frame $sample_num \
+# --resolution $resolution \
+# --patch_size $patch_size \
+# --train_batch_size $train_batch_size \
+# --learning_rate $learning_rate \
+# --num_train_steps $num_train_steps \
 # --video_encoder_type $video_encoder_type \
 # --fp16  
 

@@ -12,9 +12,6 @@ from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
 import torch
 
 from .pretrain import OPTForPretraining, OPTModel
-
-
-
 class VQA_head(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -29,9 +26,6 @@ class OPTForOpenEndedVQA(OPTForPretraining):
         super().__init__(config,video_cfg, audio_cfg)
         self.vqa_head = VQA_head(config)
         self.strengthen_two = True
-        self.txt_reduction = getattr(config,'txt_reduction',False)
-        self.video_reduction = getattr(config,'video_reduction',True)
-        self.audio_reduction = getattr(config,'audio_reduction',True)
     def forward(self,batch,compute_loss=True):
         if batch['batch_3m']['ids'] != [] :
             output_3m =  self.forward_batch(batch['batch_3m'], compute_loss)
@@ -54,14 +48,11 @@ class OPTForOpenEndedVQA(OPTForPretraining):
         txt_output_unmasked, txt_position_embedding, attn_mask_txt, txt_labels = \
                     self.opt.forward_txt_encoder(txt_tokens, perform_mask=False)
 
-        video_output_unmasked, video_position_embedding, video_mask_indicator = \
+        video_output_unmasked, video_position_embedding, video_mask_indicator, video_labels = \
                     self.opt.forward_video_encoder(video_pixels, perform_mask=False)
 
-        txt_input = self.opt.get_multimodal_forward_input_txt(txt_output_unmasked, txt_position_embedding, reduction = self.txt_reduction)
-        if self.txt_reduction:
-            attn_mask_txt = attn_mask_txt[:,0:1]
-        video_input, attn_masks_video = self.opt.get_multimodal_forward_input_video(video_output_unmasked, video_position_embedding, \
-                            video_mask_indicator, reduction = self.video_reduction)
+        txt_input = self.opt.get_multimodal_forward_input_txt(txt_output_unmasked, txt_position_embedding)
+        video_input, attn_masks_video = self.opt.get_multimodal_forward_input_video(video_output_unmasked, video_position_embedding, video_mask_indicator)
 
         is_3m = 'audio_spectrograms' in batch
         if is_3m:
@@ -70,8 +61,7 @@ class OPTForOpenEndedVQA(OPTForPretraining):
             audio_output_unmasked, audio_position_embedding = \
                     self.opt.forward_audio_encoder(audio_spectrograms)
                 
-            audio_input, attn_masks_audio = self.opt.get_multimodal_forward_input_audio( \
-                                audio_output_unmasked, audio_position_embedding, reduction = self.audio_reduction)
+            audio_input, attn_masks_audio = self.opt.get_multimodal_forward_input_audio(audio_output_unmasked, audio_position_embedding)
         else:
             audio_input=None
             attn_masks_audio = None

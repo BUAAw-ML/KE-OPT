@@ -83,8 +83,7 @@ def main(opts):
         pretrain_cfg = json.load(open(os.path.join(opts.pretrain_dir,'log','hps.json')))
         ### cover model_cfg 
         for k, v in pretrain_cfg['video_cfg'].items():
-            if not k == 'aug' and not k == 'sample_num':
-                opts.video_cfg[k] = v
+            opts.video_cfg[k] = v
         for k, v in pretrain_cfg['audio_cfg'].items():
             opts.audio_cfg[k] = v
 ### overwrite video_cfg with customize settings
@@ -96,10 +95,7 @@ def main(opts):
         opts.video_cfg['patch_size'] = opts.patch_size
     if opts.drop_ratio > 0:
         opts.video_cfg['drop_ratio'] = opts.drop_ratio
-    if opts.video_aug is not None:
-        opts.video_cfg['aug'] = opts.video_aug
-
-
+    
     if opts.audio_melbins is not None:
         opts.audio_cfg['melbins'] = opts.audio_melbins
     if opts.audio_target_length is not None:
@@ -115,8 +111,7 @@ def main(opts):
     
 
 
-    data_type = opts.data_type if opts.data_type else 'video_downstream'
-
+    data_type = getattr(opts,'data_type','video_downstream')
 
     txt_mapper = TxtMapper(opts.txt_path, opts.max_txt_len, data_type, language = opts.language)
     video_mapper_train = VideoMapper(opts.video_path, opts.video_cfg, data_type,is_training=True)
@@ -199,12 +194,6 @@ def main(opts):
         opts.model_cfg['average_audio_mode'] = opts.average_audio_mode
     if opts.audio_encoder_weights is not None :
         opts.model_cfg['audio_encoder_weights'] = opts.audio_encoder_weights
-    if opts.txt_mask_prob is not None :
-        opts.model_cfg['txt_mask_prob'] = opts.txt_mask_prob
-    if opts.label_smoothing is not None :
-        opts.model_cfg['label_smoothing'] = opts.label_smoothing
-
-
     model = OPTForCaption.from_pretrained(
         opts.model_cfg,  checkpoint, opts.video_cfg, opts.audio_cfg)
 
@@ -654,14 +643,6 @@ if __name__ == "__main__":
     parser.add_argument('--audio_encoder_weights', type=str, default=None,
                         help="random seed for initialization")
 
-    parser.add_argument('--data_type', type=str, default=None,
-                        help="random seed for initialization")
-    parser.add_argument('--txt_mask_prob', type=float, default=None,
-                        help="random seed for initialization")
-    parser.add_argument('--video_aug', type=str, default=None,
-                        help="random seed for initialization")
-    parser.add_argument('--label_smoothing', type=float, default=None,
-                        help="random seed for initialization")
     args = parse_with_config(parser)
 
     # if exists(args.output_dir) and os.listdir(args.output_dir):

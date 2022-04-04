@@ -8,14 +8,7 @@
                   "resolution":224,
                   "patch_size":16,
                   "mean":[0.485, 0.456, 0.406],
-                  "std": [0.229, 0.224, 0.225],
-                "aug":"woaug"},
-    "audio_cfg": {"melbins":128,
-        "target_length":1024,
-        "patch_size" : 32,
-        "mean":-4.2677393,
-        "std": 4.5689974,
-        "frame_shift":10},
+                  "std": [0.229, 0.224, 0.225]},
     "gradient_accumulation_steps": 1,
     "learning_rate": 1e-04,
     "valid_steps": 5000,
@@ -30,33 +23,32 @@
     "warmup_ratio": 0.1,
     "seed": 60,
     "fp16": true,
-    "n_workers": 4,
+    "n_workers": 16,
     "pin_mem": true,
     "use_validate": true,
     "data_cfg":{"train":  
-                        [
-                        {
+                        [{
                             "datasets": 
-                                [   
-                                    {"name": "cc3m",
-                                    "ids_path": "./datasets/cc3m/train_id.json",
-                                    "txt": "./datasets/cc3m/txt_mapper.json",
-                                    "video": "./datasets/cc3m/training",
-                                    "datatype": "image"}] ,
+                                [{"name": "webvid",
+                                    "ids_path": "./datasets/webvid/frames/train_frames_ids.json",
+                                    "txt": "./datasets/webvid/txt_mapper_clean.json",
+                                    "video": "./datasets/webvid/frames/train",
+                                    "datatype": "video"}] ,
                             "task" : "mlmTwo_contraTwo_unimlmTwo_matchTwo",
                             "mix_ratio": 1,
-                            "batch_size": 128
+                            "batch_size": 96
                             
                         }],
                 "val":                
-                    [
-                        {"name": "cc3m",
-                        "ids_path": "./datasets/cc3m/val_id.json",
-                        "txt": "./datasets/cc3m/txt_mapper.json",
-                        "video": "./datasets/cc3m/validation",
-                        "datatype": "image",
+                    [{
+                        "name": "webvid",
+                        "ids_path": "./datasets/webvid/frames/val_frames_ids.json",
+                        "txt": "./datasets/webvid/txt_mapper_clean.json",
+                        "video": "./datasets/webvid/frames/val",
+                        "datatype": "video", 
                         "task": "mlmTwo_contraTwo_unimlmTwo_matchTwo",
-                        "batch_size": 128 }]},
+                        "batch_size": 128  
+                    }]},
 
     "model_cfg": {
         "hidden_size":768,
@@ -71,14 +63,9 @@
         "multimodal_layer_num": 3,
         "video_encoder_type":"timesformer_space",
         "average_video":true,
-        "audio_layer_num":12,
         "match_mode":"pair_simple",
         "pretrain_match_mode": "pair_simple",
         "reuse_embedding":true,
         "multimodal_norm_mode":"prenorm",
-        "average_video_mode":"space",
-        "average_audio_mode":"space",
-        "strengthen_two":false,
-        "txt_encoder_weights":"./output/pretrianed_weights/bert-base-uncased.bin",
-        "video_encoder_weights":"./output/pretrianed_weights/ViT-B_16.npz",
-        "audio_encoder_weights":"./output/pretrianed_weights/ViT-B_32.npz"}}
+        "contra_filter":true}
+}

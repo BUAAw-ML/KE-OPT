@@ -253,11 +253,11 @@ class OPTTextEmbeddings(nn.Module):
 
     
 
-    def forward(self, txt_tokens, perform_mask = False, txt_mask_indicator = None):
+    def forward(self, txt_tokens, perform_mask = False):
         txt_labels = None
         if perform_mask:
             txt_tokens = txt_tokens.clone() ### important, must have
-            txt_tokens, txt_labels = self.perform_mask(txt_tokens, txt_mask_indicator=txt_mask_indicator)
+            txt_tokens, txt_labels = self.perform_mask(txt_tokens)
 
         words_embeddings = self.word_embeddings(txt_tokens)
         position_ids = torch.arange(words_embeddings.shape[1], dtype=torch.long, device= words_embeddings.device).unsqueeze(0)
@@ -269,30 +269,31 @@ class OPTTextEmbeddings(nn.Module):
 
         return embeddings, position_embeddings, txt_labels
     
-    def perform_mask(self, txt_tokens, txt_mask_indicator=None):
-        if txt_mask_indicator is None:
-            ### generate indicator first:
-            txt_mask_indicator = torch.zeros_like(txt_tokens)
-            for i in range(len(txt_mask_indicator)):
-                while all(txt_mask_indicator[i] == 0):
-                    for j in range(1, len(txt_mask_indicator[0])):
-                        if txt_tokens[i][j]!=0 and random.random() < self.mask_prob:
-                            txt_mask_indicator[i][j] = 1
-                
+    def perform_mask(self, txt_tokens):
         labels = torch.zeros_like(txt_tokens).fill_(-1)
         for i in range(txt_tokens.shape[0]):
-            for j in range(txt_tokens.shape[1]):
-                
-                if txt_mask_indicator[i][j] == 1 :
+            for j in range(1, txt_tokens.shape[1]):
+                prob = random.random()
+                if txt_tokens[i][j]!=0 and prob < self.mask_prob:
                     src_token = txt_tokens[i][j].item()
-                    prob = random.random()
+                    prob /= self.mask_prob
+
                     if prob < 0.8:
                         txt_tokens[i][j] = self.mask_token
                     elif prob < 0.9:
                         txt_tokens[i][j] = random.choice(list(range(*self.range)))            
                         
                     labels[i][j] = src_token
-
+            #### at least mask one token 
+            if all(labels[i] == -1):
+                src_token = txt_tokens[i][1].item()
+                prob = random.random()
+                if prob < 0.8:
+                    txt_tokens[i][1] = self.mask_token
+                elif prob < 0.9:
+                    txt_tokens[i][1] = random.choice(list(range(*self.range)))            
+                        
+                labels[i][1] = src_token
                 
         return txt_tokens, labels
 
@@ -315,17 +316,48 @@ class TimesformerVideoEmbeddings(nn.Module):
         # self.layernorm = FusedLayerNorm(config.hidden_size, eps=1e-12)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.cls_token = nn.Parameter(0.02 * torch.randn(1, 1, config.hidden_size)) 
-        self.mask_prob = getattr(config,'video_mask_prob', 0.6)
+        self.token_drop_ratio = video_cfg.get('token_drop_ratio', 0)
+        self.mask_prob = getattr(config,'video_mask_prob', 0.15)
         self.mask_token = nn.Parameter(0.02 * torch.randn(config.hidden_size)) 
-        self.block_masking = True        
+        self.drop_masktoken = getattr(config,'drop_masktoken', False)
 
     def forward(self, video_pixels, perform_mask = False):  ### shape Bxnx3xHxW
         b, n, c, h, w = video_pixels.shape
         video_pixels = video_pixels.reshape(b*n, c,h,w) 
+        # video_pixels_raw = None
         video_mask_indicator = None 
+        video_labels = None
+        if perform_mask:
+            video_pixels_raw = video_pixels.reshape(b*n , c, h//self.patch_size, self.patch_size, w//self.patch_size, self.patch_size)
+            video_pixels_raw = video_pixels_raw.permute(0, 2, 4, 3, 5, 1).reshape(b,-1, c*self.patch_size*self.patch_size)
         video_pixels = self.first_conv(video_pixels)  ### B*n, 768,h,w
         video_pixels = video_pixels.permute(0,2,3,1) ### B*n, h,w,768
         video_pixels = video_pixels.reshape(b,-1,video_pixels.shape[-1])
+
+
+        if perform_mask:
+
+            video_mask_indicator = torch.zeros(video_pixels.shape[:2]).long().cuda()
+            
+            # for i in range(video_pixels.shape[0]):
+            #     for j in range(video_pixels.shape[1]):
+            #         if random.random() < self.mask_prob:
+            #             video_mask_indicator[i][j] = 1
+
+            ### make sure every frame mask same number of tokens 
+            video_mask_indicator = video_mask_indicator.reshape(b*self.sample_num, -1)
+            mask_num  = int(self.mask_prob*video_mask_indicator.shape[1])
+            video_mask_indicator[:,:mask_num] = 1
+            for i in range(video_mask_indicator.shape[0]):
+                shuffle_idx = torch.randperm(video_mask_indicator.shape[1])
+                video_mask_indicator[i] = video_mask_indicator[i][shuffle_idx]
+            video_mask_indicator = video_mask_indicator.reshape(b,-1)
+
+            video_pixels[video_mask_indicator.bool()] = self.mask_token           
+            video_labels = video_pixels_raw[video_mask_indicator.bool()]
+ 
+            assert self.token_drop_ratio == 0 , 'mask conflicts with drop token.' 
+
         
         batch_size = video_pixels.shape[0]
         cls_token = self.cls_token.expand(batch_size,-1,-1)
@@ -339,44 +371,13 @@ class TimesformerVideoEmbeddings(nn.Module):
         frame_ids = torch.tensor(frame_ids, dtype=torch.long, device=video_pixels.device).unsqueeze(0)
         position_embeddings[:,1:] += self.frame_embedding(frame_ids)
 
+
+
         embeddings = video_tokens + position_embeddings 
         #embeddings = self.layernorm(embeddings)
         embeddings = self.dropout(embeddings)
 
-
-        if perform_mask:
-
-            video_mask_indicator = torch.zeros(video_pixels.shape[:2]).long().cuda()
-            
-            ### make sure every frame mask same number of tokens 
-            
-            if not self.block_masking:
-                ### random masking 
-                video_mask_indicator = video_mask_indicator.reshape(b*self.sample_num, -1)
-                mask_num  = int(self.mask_prob*video_mask_indicator.shape[1])
-                video_mask_indicator[:,:mask_num] = 1
-                for i in range(video_mask_indicator.shape[0]):
-                    shuffle_idx = torch.randperm(video_mask_indicator.shape[1])
-                    video_mask_indicator[i] = video_mask_indicator[i][shuffle_idx]
-            
-            else:
-                ###block_masking:
-                h = w = int(math.sqrt(self.token_length_per_frame))
-                video_mask_indicator = video_mask_indicator.reshape(b, self.sample_num, h, w)
-                for i in range(b):
-                    masked_h = int(self.mask_prob*h)
-                    masked_w = int(self.mask_prob*w)
-                    start_h = np.random.randint(0,h-masked_h)
-                    start_w = np.random.randint(0,w-masked_w)
-                    video_mask_indicator[i,:,start_h:start_h+masked_h, start_w:start_w+masked_w] = 1
-                
-
-
-            video_mask_indicator = video_mask_indicator.reshape(b,-1)
-
-            #video_pixels[video_mask_indicator.bool()] = self.mask_token           
-            #video_labels = video_pixels_raw[video_mask_indicator.bool()]
-        
+        if self.drop_masktoken:
             cls_embedding = embeddings[:,0:1]
             res_embedding = embeddings[:,1:]
             dim = res_embedding.shape[-1]
@@ -385,8 +386,30 @@ class TimesformerVideoEmbeddings(nn.Module):
             embeddings = torch.cat((cls_embedding, res_embedding),dim=1)
 
 
-        return embeddings, position_embeddings, video_mask_indicator
-        #return embeddings, position_embeddings, video_mask_indicator, video_labels
+        
+        elif self.training and self.token_drop_ratio > 0:
+            position_embeddings = position_embeddings.expand(embeddings.shape[0],-1,-1)
+            embeddings_p1 = embeddings[:,:1] ### cls token do not drop
+            position_embeddings_p1 = position_embeddings[:,:1]
+            embeddings_p2 = embeddings[:,1:]
+            position_embeddings_p2 = position_embeddings[:,1:]
+            b, n, c = embeddings_p2.shape
+            embeddings_p2 = embeddings_p2.reshape(b*self.sample_num, self.token_length_per_frame, c)
+            position_embeddings_p2 = position_embeddings_p2.reshape(b*self.sample_num, self.token_length_per_frame, c)
+            src_len = embeddings_p2.shape[1]
+            tgt_len = int((1 - self.token_drop_ratio) * src_len)
+            tmp = list(range(src_len))
+            gather_idx = [ random.sample(tmp,tgt_len) for i in range(embeddings_p2.shape[0]) ]
+            for i in gather_idx:
+                i.sort()
+            gather_idx = torch.tensor(gather_idx).to(video_pos_ids).unsqueeze(-1).expand(-1,-1,embeddings_p2.shape[-1])
+            embeddings_p2 = torch.gather(embeddings_p2, 1 , gather_idx)
+            position_embeddings_p2 = torch.gather(position_embeddings_p2, 1 , gather_idx)
+            embeddings_p2 = embeddings_p2.reshape(b,-1,c)
+            position_embeddings_p2 = position_embeddings_p2.reshape(b,-1,c)
+            embeddings = torch.cat((embeddings_p1, embeddings_p2),dim=1)
+            position_embeddings = torch.cat((position_embeddings_p1, position_embeddings_p2),dim=1)
+        return embeddings, position_embeddings, video_mask_indicator, video_labels
 
 
 class VitVideoEmbeddings(nn.Module):
@@ -504,22 +527,14 @@ class OPTModel(nn.Module):
         base_cfg.num_attention_heads = 12
 
         ### txt embedding and txt encoder
-
-        has_txt_encoder = getattr(config,'has_txt_encoder',True)
-        has_video_encoder = getattr(config,'has_video_encoder',True)
-        has_audio_encoder = getattr(config,'has_audio_encoder',True)
         
         model_cfg_txt = copy.copy(base_cfg)
         model_cfg_txt.num_hidden_layers = config.txt_layer_num
         model_cfg_txt.vocab_size = config.vocab_size
         model_cfg_txt.max_position_embeddings = config.max_position_embeddings
-        if hasattr(config,'txt_mask_prob'):
-            model_cfg_txt.txt_mask_prob = config.txt_mask_prob
 
         self.txt_embeddings = OPTTextEmbeddings(model_cfg_txt)
-
-        if has_txt_encoder:
-            self.txt_encoder = OPTEncoder(model_cfg_txt, mode='postnorm')
+        self.txt_encoder = OPTEncoder(model_cfg_txt, mode='postnorm')
 
         ### video embedding and video encoder
         self.video_encoder_type = config.video_encoder_type
@@ -530,29 +545,28 @@ class OPTModel(nn.Module):
         model_cfg_video.num_hidden_layers = config.video_layer_num
         model_cfg_video.video_encoder_type = config.video_encoder_type
 
-        if has_video_encoder:
-            if self.video_encoder_type.startswith('vit'):
-                self.video_embeddings = VitVideoEmbeddings(model_cfg_video, video_cfg)
-                self.video_encoder = OPTEncoder(config, mode='prenorm')
 
-            elif self.video_encoder_type.startswith('timesformer'):
-                self.video_embeddings = TimesformerVideoEmbeddings(model_cfg_video, video_cfg)
-                self.video_encoder = TimesFormerEncoder(model_cfg_video,video_cfg)
-            
-            elif self.video_encoder_type == 'videoswin':
-                self.time_stride = config.videoswin_timestride
-                self.video_encoder = SwinTransformer3D(time_stride = self.time_stride)
-                self.sample_num = video_cfg['sample_num']
-                self.token_length_per_frame = (video_cfg['resolution'] // video_cfg['patch_size']) **2
-                self.position_embeddings = nn.Embedding(self.token_length_per_frame, config.hidden_size)
-                self.frame_embedding = nn.Embedding(10,config.hidden_size)  ###assert max 10 frames
+        if self.video_encoder_type.startswith('vit'):
+            self.video_embeddings = VitVideoEmbeddings(model_cfg_video, video_cfg)
+            self.video_encoder = OPTEncoder(config, mode='prenorm')
+
+        elif self.video_encoder_type.startswith('timesformer'):
+            self.video_embeddings = TimesformerVideoEmbeddings(model_cfg_video, video_cfg)
+            self.video_encoder = TimesFormerEncoder(model_cfg_video,video_cfg)
+        
+        elif self.video_encoder_type == 'videoswin':
+            self.time_stride = config.videoswin_timestride
+            self.video_encoder = SwinTransformer3D(time_stride = self.time_stride)
+            self.sample_num = video_cfg['sample_num']
+            self.token_length_per_frame = (video_cfg['resolution'] // video_cfg['patch_size']) **2
+            self.position_embeddings = nn.Embedding(self.token_length_per_frame, config.hidden_size)
+            self.frame_embedding = nn.Embedding(10,config.hidden_size)  ###assert max 10 frames
         
         ### audio embedding and audio encoder
         model_cfg_audio = copy.copy(base_cfg)
         model_cfg_audio.num_hidden_layers = config.audio_layer_num
-        if has_audio_encoder:
-            self.audio_embeddings = OPTAudioEmbeddings(model_cfg_audio, audio_cfg)
-            self.audio_encoder = OPTEncoder(model_cfg_audio, mode='prenorm')
+        self.audio_embeddings = OPTAudioEmbeddings(model_cfg_audio, audio_cfg)
+        self.audio_encoder = OPTEncoder(model_cfg_audio, mode='prenorm')
 
 
         ### multimodal encoder
@@ -578,13 +592,11 @@ class OPTModel(nn.Module):
         self.audio_encoder_weights = config.audio_encoder_weights
 
         self.audio_cfg = audio_cfg
-        self.video_cfg = video_cfg
 
 
-    def forward_txt_encoder(self, txt_tokens, perform_mask=False, txt_mask_indicator = None):
+    def forward_txt_encoder(self, txt_tokens, perform_mask=False):
         attn_mask_txt = (txt_tokens != 0).long()
-        txt_embeddings, txt_position_embeddings, txt_labels = self.txt_embeddings(txt_tokens, \
-            perform_mask=perform_mask,txt_mask_indicator = txt_mask_indicator )
+        txt_embeddings, txt_position_embeddings, txt_labels = self.txt_embeddings(txt_tokens, perform_mask=perform_mask)
         attn_masks = attn_mask_txt.unsqueeze(1).expand(-1, txt_tokens.shape[-1], -1).clone()
         # if multimodal_uniattn:
         #     attn_masks = torch.tril(attn_masks)
@@ -616,7 +628,7 @@ class OPTModel(nn.Module):
             return video_output, position_embeddings
 
         elif self.video_encoder_type.startswith('timesformer'):
-            video_embeddings, position_embeddings, video_mask_indicator = self.video_embeddings(video_pixels, perform_mask = perform_mask) #[b, (n*f+1), c]
+            video_embeddings, position_embeddings, video_mask_indicator, video_labels = self.video_embeddings(video_pixels, perform_mask = perform_mask) #[b, (n*f+1), c]
             video_output = self.video_encoder(video_embeddings)
 
         elif self.video_encoder_type == 'videoswin':
@@ -638,7 +650,7 @@ class OPTModel(nn.Module):
             frame_ids = torch.tensor(frame_ids, dtype=torch.long, device=video_pixels.device).unsqueeze(0)
             position_embeddings += self.frame_embedding(frame_ids)
 
-        return video_output, position_embeddings, video_mask_indicator
+        return video_output, position_embeddings, video_mask_indicator, video_labels
     
 
     def forward_audio_encoder(self, audio_spectrograms):
@@ -647,15 +659,13 @@ class OPTModel(nn.Module):
         return audio_output, position_embeddings
     
 
-    def get_multimodal_forward_input_txt(self, txt_output, txt_position_embedding, reduction = True):
+    def get_multimodal_forward_input_txt(self, txt_output, txt_position_embedding):
         if self.reuse_embedding:
             txt_output = txt_output + self.txt_type_embeddings + txt_position_embedding
-        if reduction:
-            txt_output = txt_output[:,0:1]
         return txt_output
 
-    def get_multimodal_forward_input_video(self, video_output, video_position_embedding, video_mask_indicator, reduction = True):
-        if video_mask_indicator is not None:   #### refill in the mask_token
+    def get_multimodal_forward_input_video(self, video_output, video_position_embedding, video_mask_indicator):
+        if self.video_embeddings.drop_masktoken:   #### refill in the mask_token
             cls_embedding = video_output[:,0:1]
             res_embedding = video_output[:,1:]
             b,_,c = video_output.shape
@@ -665,12 +675,11 @@ class OPTModel(nn.Module):
             unmasked_idx = ~video_mask_indicator.bool()
             fillin_embedding[unmasked_idx] = res_embedding.reshape(-1,c)
             video_output = torch.cat((cls_embedding, fillin_embedding),dim=1)
-            assert reduction == False  ### conflict 
 
         if self.reuse_embedding:
             video_output = video_output + self.video_type_embeddings + video_position_embedding
          
-        if reduction:
+        if self.average_video:
             batch_size,_,hidden_size = video_output.shape
             average_video = video_output[:,1:].reshape(batch_size,self.frame_num, self.token_length_per_frame,hidden_size)
             if self.average_video_mode == 'time':
@@ -685,27 +694,24 @@ class OPTModel(nn.Module):
         
         return video_output, attn_masks_video
 
-    def get_multimodal_forward_input_audio(self, audio_output, audio_position_embedding, reduction = True):
+    def get_multimodal_forward_input_audio(self, audio_output, audio_position_embedding):
         if self.reuse_embedding:
             audio_output = audio_output + self.audio_type_embeddings + audio_position_embedding
-        
-        if reduction:
-            if self.average_audio_mode == 'space':
-                average_audio =  audio_output[:,1:]
-                average_audio = average_audio.mean(dim=1,keepdim=True)
-                audio_output = torch.cat((audio_output[:,0:1], average_audio),dim=1)
-            else:
-                raise NotImplementedError()
-        
+        if self.average_audio_mode == 'space':
 
+            average_audio =  audio_output[:,1:]
+            average_audio = average_audio.mean(dim=1,keepdim=True)
+            audio_output = torch.cat((audio_output[:,0:1], average_audio),dim=1)
+        
+        elif self.average_audio_mode == 'none':
+            pass
+        else:
+            raise NotImplementedError
         attn_masks_audio = torch.ones(*audio_output.shape[:2]).long().cuda()
         return audio_output, attn_masks_audio
 
     def forward_multimodal_encoder(self, txt_output, attn_masks_txt, video_output, attn_masks_video, audio_output=None, attn_masks_audio=None):
-        if txt_output is None and audio_output is None: ### only video input
-            multimodal_output = self.multimodal_encoder(video_output)
-
-        elif audio_output is None  and  attn_masks_audio is None:  #### m2
+        if audio_output is None  and  attn_masks_audio is None:  #### m2
             attn_masks_multimodal_clstoken = torch.ones(attn_masks_txt.shape[0]).to(attn_masks_txt).unsqueeze(1)
             attn_masks = torch.cat((attn_masks_multimodal_clstoken, attn_masks_txt, attn_masks_video),dim=1)
             attn_masks = attn_masks.unsqueeze(1).unsqueeze(2)
@@ -847,16 +853,7 @@ class OPTModel(nn.Module):
             video_weight['video_embeddings.cls_token']  = trans(vit_weight['cls'])
             video_weight['video_embeddings.first_conv.weight'] =  trans(vit_weight['embedding/kernel']).permute(3,2,0,1)  ### need to permute?
             video_weight['video_embeddings.first_conv.bias'] = trans(vit_weight['embedding/bias'])
-
-            pe_weight= trans(vit_weight['Transformer/posembed_input/pos_embedding']).squeeze()
-            src_len = int(math.sqrt(pe_weight.shape[0] - 1))
-            tgt_len = self.video_cfg['resolution'] // self.video_cfg['patch_size']
-            if src_len != tgt_len:
-                LOGGER.info('interpolation for pe')
-                src_weight = pe_weight[1:].reshape(src_len,src_len,-1).permute(2,0,1).unsqueeze(0)
-                tgt_weight = F.interpolate(src_weight, (tgt_len,tgt_len), mode='bilinear').squeeze().permute(1,2,0)
-                pe_weight = torch.cat((pe_weight[0].unsqueeze(0), tgt_weight.reshape(tgt_len**2,-1)), dim=0)
-            video_weight['video_embeddings.position_embeddings.weight'] = pe_weight
+            video_weight['video_embeddings.position_embeddings.weight'] = trans(vit_weight['Transformer/posembed_input/pos_embedding']).squeeze()
             #'video_embeddings.mask_embedding.weight', 
             #'video_embeddings.layernorm.weight', 
             #'video_embeddings.layernorm.bias'

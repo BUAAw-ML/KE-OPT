@@ -88,8 +88,7 @@ def main(opts):
         pretrain_cfg = json.load(open(os.path.join(opts.pretrain_dir,'log','hps.json')))
         ### cover model_cfg 
         for k, v in pretrain_cfg['video_cfg'].items():
-            if not k == 'aug' and not k == 'sample_num':
-                opts.video_cfg[k] = v
+            opts.video_cfg[k] = v
 ### overwrite video_cfg with customize settings
     if opts.sample_frame > 0:
         opts.video_cfg['sample_num'] = opts.sample_frame
@@ -99,9 +98,9 @@ def main(opts):
         opts.video_cfg['patch_size'] = opts.patch_size
     if opts.drop_ratio > 0:
         opts.video_cfg['drop_ratio'] = opts.drop_ratio
-    if opts.video_aug is not None:
-        opts.video_cfg['aug'] = opts.video_aug
-    data_type = opts.data_type if opts.data_type else 'video_downstream'
+
+    # load DBs and video dirs
+    data_type = getattr(opts,'data_type','video_downstream')
     txt_mapper = TxtMapper(opts.txt_path, opts.max_txt_len, data_type)
     video_mapper_train = VideoMapper(opts.video_path, opts.video_cfg, data_type,is_training=True)
     video_mapper_test = VideoMapper(opts.video_path, opts.video_cfg, data_type,is_training=False)
@@ -189,7 +188,7 @@ def main(opts):
     model.to(device)
     # make sure every process has same model parameters in the beginning
     broadcast_tensors([p.data for p in model.parameters()], 0)
-    #set_dropout(model, opts.dropout)
+    set_dropout(model, opts.dropout)
 
     # Prepare optimizer
     optimizer = build_optimizer(model, opts)
@@ -782,8 +781,6 @@ if __name__ == "__main__":
                              "checkpoints will be written.")
     parser.add_argument('--reuse_embedding', type=str2bool, default=True,
                         help="random seed for initialization")
-    parser.add_argument('--data_type', type=str, default=None,
-                        help="random seed for initialization")
     parser.add_argument('--average_video', type=str2bool, default=None,
                         help="random seed for initialization")
     parser.add_argument('--pretrain_dir', type=str, default='',
@@ -791,8 +788,6 @@ if __name__ == "__main__":
     parser.add_argument('--multimodal_norm_mode', type=str, default=None,
                         help="random seed for initialization")
     parser.add_argument('--use_audio', type=str2bool, default=True,
-                        help="random seed for initialization")
-    parser.add_argument('--video_aug', type=str, default=None,
                         help="random seed for initialization")
     args = parse_with_config(parser)
 

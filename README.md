@@ -1,5 +1,3 @@
-# KE-OPT: Knowledge Enhancement-OPT Omni-Perception Pre-Trainer
-
 # OPT: UNiversal Image-TExt Representation Learning
 This is the official repository of [OPT](https://arxiv.org/abs/1909.11740) (ECCV 2020).
 This repository currently supports finetuning OPT on

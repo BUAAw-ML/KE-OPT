@@ -75,9 +75,7 @@
         "multimodal_norm_mode":"prenorm",
         "average_video_mode":"space",
         "average_audio_mode":"space",
-        "strengthen_two":true,
-        "attentive_mask_txt":true,
-        "attentive_mask_txt_guide":"intra",
+        "strengthen_two":false,
         "txt_encoder_weights":"./output/pretrianed_weights/bert-base-uncased.bin",
         "video_encoder_weights":"./output/pretrianed_weights/ViT-B_16.npz",
         "audio_encoder_weights":"./output/pretrianed_weights/ViT-B_32.npz"}}

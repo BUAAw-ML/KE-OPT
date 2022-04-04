@@ -34,7 +34,6 @@ class OPTForCaption(OPTForPretraining):
         self.eos_token = getattr(config,'eos_token',10)
         self.cls_token = 101
         self.strengthen_two = True
-        self.label_smoothing = getattr(config,'label_smoothing',0)
 
     def forward_caption(self, batch, compute_loss=True):
         batch = defaultdict(lambda: None, batch)
@@ -49,7 +48,7 @@ class OPTForCaption(OPTForPretraining):
 
         if compute_loss:
 
-            video_output_unmasked, video_position_embedding, video_mask_indicator = \
+            video_output_unmasked, video_position_embedding, video_mask_indicator, video_labels = \
                     self.opt.forward_video_encoder(video_pixels, perform_mask=False)
             video_input, attn_masks_video = self.opt.get_multimodal_forward_input_video(video_output_unmasked, video_position_embedding, video_mask_indicator)
 
@@ -65,47 +64,23 @@ class OPTForCaption(OPTForPretraining):
             caption_output, txt_labels_caption = self.opt.forward_caption_encoder(txt_tokens, attn_mask_txt, \
                                             video_input, attn_masks_video, audio_input, attn_masks_audio)
             caption_output_txt = caption_output[:, :txt_tokens.shape[1], :]
-            masked_output = caption_output_txt[txt_labels_caption != -1]
+            masked_output = self._compute_masked_hidden(caption_output_txt, txt_labels_caption != -1)
             prediction_scores_caption = self.cls(masked_output)       
 
-
-            #### compute masked_lm_loss( with label smoothing)
+    
             masked_lm_loss = F.cross_entropy(prediction_scores_caption,
                                         txt_labels_caption[txt_labels_caption != -1],
-                                        reduction='none') 
-            
-            if self.label_smoothing > 0:
-                
-                smooth_loss = -F.log_softmax(prediction_scores_caption, dim=-1).mean(dim=-1)
-                masked_lm_loss  = (1- self.label_smoothing) * masked_lm_loss + self.label_smoothing * smooth_loss
-        
-            masked_lm_loss = masked_lm_loss.mean()
-
-
-
+                                        reduction='mean') 
 
             if is_3m and  self.strengthen_two:
                 caption_output, txt_labels_caption = self.opt.forward_caption_encoder(txt_tokens, attn_mask_txt, \
                                                 video_input, attn_masks_video,None, None)
                 caption_output_txt = caption_output[:, :txt_tokens.shape[1], :]
-                masked_output = caption_output_txt[txt_labels_caption != -1]
-                prediction_scores_caption = self.cls(masked_output)   
-
-
-
-                #### compute masked_lm_loss_two( with label smoothing)
+                masked_output = self._compute_masked_hidden(caption_output_txt, txt_labels_caption != -1)
+                prediction_scores_caption = self.cls(masked_output)        
                 masked_lm_loss_two = F.cross_entropy(prediction_scores_caption,
                                                 txt_labels_caption[txt_labels_caption != -1],
-                                                reduction='none') 
-                if self.label_smoothing > 0:
-                    smooth_loss = -F.log_softmax(prediction_scores_caption, dim=-1).mean(dim=-1)
-                    masked_lm_loss_two  = (1- self.label_smoothing) * masked_lm_loss_two + self.label_smoothing * smooth_loss
-        
-                masked_lm_loss_two = masked_lm_loss_two.mean()
-
-
-
-
+                                                reduction='mean') 
                 return {'caption_loss_3m': 0.5 * masked_lm_loss + 0.5 * masked_lm_loss_two}
             
             elif is_3m:
@@ -151,7 +126,7 @@ class OPTForCaption(OPTForPretraining):
         is_3m = 'audio_spectrograms' in batch
 
         video_pixels = batch['video_pixels']
-        video_output_unmasked, video_position_embedding, video_mask_indicator = \
+        video_output_unmasked, video_position_embedding, video_mask_indicator, video_labels = \
                     self.opt.forward_video_encoder(video_pixels, perform_mask=False)
         video_input, attn_masks_video = self.opt.get_multimodal_forward_input_video(video_output_unmasked, video_position_embedding, video_mask_indicator)
 
@@ -361,5 +336,9 @@ class OPTForCaption(OPTForPretraining):
 
 
 
-
+    def _compute_masked_hidden(self, hidden, mask):
+        """ get only the masked region (don't compute unnecessary hiddens) """
+        mask = mask.unsqueeze(-1).expand_as(hidden)
+        hidden_masked = hidden[mask].contiguous().view(-1, hidden.size(-1))
+        return hidden_masked
 

@@ -83,8 +83,7 @@ def main(opts):
         pretrain_cfg = json.load(open(os.path.join(opts.pretrain_dir,'log','hps.json')))
         ### cover model_cfg 
         for k, v in pretrain_cfg['video_cfg'].items():
-            if not k == 'aug' and not k == 'sample_num':
-                opts.video_cfg[k] = v
+            opts.video_cfg[k] = v
         for k, v in pretrain_cfg['audio_cfg'].items():
             opts.audio_cfg[k] = v
 ### overwrite video_cfg with customize settings
@@ -96,9 +95,6 @@ def main(opts):
         opts.video_cfg['patch_size'] = opts.patch_size
     if opts.drop_ratio > 0:
         opts.video_cfg['drop_ratio'] = opts.drop_ratio
-    if opts.video_aug is not None:
-        opts.video_cfg['aug'] = opts.video_aug
-
 
     if opts.audio_melbins is not None:
         opts.audio_cfg['melbins'] = opts.audio_melbins
@@ -112,8 +108,7 @@ def main(opts):
     if not opts.use_audio:
         opts.audio_path = '' #### delete audio path for 2m exp
  
-    #加载数据
-    data_type = opts.data_type if opts.data_type else 'video_downstream'
+    data_type = getattr(opts,'data_type','video_downstream')
     txt_mapper = TxtMapperForOpenEndedVQA(opts.txt_path, opts.answer_candidate_path, opts.max_txt_len)
     video_mapper_train = VideoMapper(opts.video_path, opts.video_cfg, data_type,is_training=True)
     video_mapper_test = VideoMapper(opts.video_path, opts.video_cfg, data_type,is_training=False)
@@ -127,7 +122,6 @@ def main(opts):
     test_dataset = OpenEndedVQADataset(opts.test_ids_path, txt_mapper, video_mapper_test, audio_mapper, training=False)
     test_loader = build_dataloader(test_dataset, openendedvqa_collate, False, opts)
 
-    #加载模型
     if opts.checkpoint:
         checkpoint = torch.load(opts.checkpoint, map_location = device)
     elif opts.pretrain_dir:
@@ -167,7 +161,7 @@ def main(opts):
     else:
         checkpoint = {}
 
-    #
+    
     opts.model_cfg['answer_num'] = len(json.load(open(opts.answer_candidate_path)))
     if opts.multimodal_norm_mode:
         opts.model_cfg['multimodal_norm_mode'] = opts.multimodal_norm_mode
@@ -195,7 +189,6 @@ def main(opts):
     # make sure every process has same model parameters in the beginning
     broadcast_tensors([p.data for p in model.parameters()], 0)
     #set_dropout(model, opts.dropout)
-
 
     # Prepare optimizer
     optimizer = build_optimizer_for_VQA(model, opts)
@@ -238,7 +231,7 @@ def main(opts):
     if opts.zero_shot:
         return 
 
-    #训练模型
+
     while True:
         
         for step, batch in enumerate(train_dataloader):
@@ -485,8 +478,6 @@ if __name__ == "__main__":
 
 
     # training parameters
-    parser.add_argument('--data_type', type=str, default=None,
-                        help="random seed for initialization")
     parser.add_argument("--train_batch_size", default=128, type=int,
                         help="Total batch size for training. "
                              "(batch by examples)")
@@ -604,9 +595,7 @@ if __name__ == "__main__":
     parser.add_argument('--average_audio_mode', type=str, default=None,
                         help="random seed for initialization")      
     parser.add_argument('--audio_encoder_weights', type=str, default=None,
-                        help="random seed for initialization")  
-    parser.add_argument('--video_aug', type=str, default=None,
-                        help="random seed for initialization")              
+                        help="random seed for initialization")                
     args = parse_with_config(parser)
 
 

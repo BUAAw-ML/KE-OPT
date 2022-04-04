@@ -87,8 +87,7 @@ def main(opts):
         pretrain_cfg = json.load(open(os.path.join(opts.pretrain_dir,'log','hps.json')))
         ### cover model_cfg 
         for k, v in pretrain_cfg['video_cfg'].items():
-            if not k == 'aug' and not k == 'sample_num':
-                opts.video_cfg[k] = v
+            opts.video_cfg[k] = v
         for k, v in pretrain_cfg['audio_cfg'].items():
             opts.audio_cfg[k] = v
 ### overwrite video_cfg with customize settings
@@ -100,9 +99,6 @@ def main(opts):
         opts.video_cfg['patch_size'] = opts.patch_size
     if opts.drop_ratio > 0:
         opts.video_cfg['drop_ratio'] = opts.drop_ratio
-    if opts.video_aug is not None:
-        opts.video_cfg['aug'] = opts.video_aug
-
 
     if opts.audio_melbins is not None:
         opts.audio_cfg['melbins'] = opts.audio_melbins
@@ -117,7 +113,7 @@ def main(opts):
         opts.audio_path = '' #### delete audio path for 2m exp
 
 
-    data_type = opts.data_type if opts.data_type else 'video_downstream'
+    data_type = getattr(opts,'data_type','video_downstream')
 
     txt_mapper = TxtMapper(opts.txt_path, opts.max_txt_len, data_type)
     video_mapper_train = VideoMapper(opts.video_path, opts.video_cfg, data_type,is_training=True)
@@ -136,9 +132,7 @@ def main(opts):
     # assert eval_retrieval or eval_multiple_choice_vqa , 'at least for one task'
     if eval_retrieval:
         test_mapper_retrieval = TxtMapper(opts.txt_path_retrievaltest, opts.max_txt_len, 'downstream')
-        
-        test_dataset = TxtVideoAudioDataset(opts.test_ids_path, test_mapper_retrieval, \
-                        video_mapper_test, audio_mapper, return_all_text =  True)
+        test_dataset = TxtVideoAudioDataset(opts.test_ids_path, test_mapper_retrieval, video_mapper_test, audio_mapper)
         test_loader = build_dataloader(test_dataset, txtvideoaudio_collate, False, opts)
     
 
@@ -226,7 +220,7 @@ def main(opts):
     model.to(device)
     # make sure every process has same model parameters in the beginning
     broadcast_tensors([p.data for p in model.parameters()], 0)
-    #set_dropout(model, opts.dropout)
+    set_dropout(model, opts.dropout)
 
     # Prepare optimizer
     optimizer = build_optimizer(model, opts)
@@ -263,11 +257,12 @@ def main(opts):
     if eval_retrieval:
         
         eval_log = evaluate(model, test_loader)
-        if hvd.rank()==0:  
+        if hvd.rank()==0:
+            print(eval_log)    
             for eval_name, metric in eval_log.items():
 
                 TB_LOGGER.log_scaler_dict({f"eval/{eval_name}/test_{k}": v
-                                    for k, v in metric.items() if not isinstance(v,str)})
+                                    for k, v in metric.items()})
                 LOGGER.info(f"====-evaluation--{eval_name}=====step{global_step}--==========\n")
                 LOGGER.info(metric)
                                 
@@ -340,27 +335,47 @@ def main(opts):
 
                 if global_step % opts.valid_steps == 0:
 
-                    eval_log = evaluate(model, test_loader)
+                    if eval_retrieval:
+                        eval_log = evaluate(model, test_loader)
+                    # if eval_multiple_choice_vqa:
+                    #     accuracy = evaluate_MCQA(model, test_loader_MCQA)
+
 
                     if hvd.rank() == 0:
+                        if eval_retrieval:
+                            for eval_name, metric in eval_log.items():
+                                metric_logger_dict[eval_name][str(global_step)] = metric
+                                if ('best_step' not in metric_logger_dict[eval_name]) or \
+                                        (metric['video_rsum'] >= metric_logger_dict[eval_name]['best_value']):
+                                    metric_logger_dict[eval_name]['best_step'] = global_step
+                                    metric_logger_dict[eval_name]['best_value'] = metric['video_rsum']
 
-                        for eval_name, metric in eval_log.items():
-                            metric_logger_dict[eval_name][str(global_step)] = metric
-                            if ('best_step' not in metric_logger_dict[eval_name]) or \
-                                    (metric['video_rsum'] >= metric_logger_dict[eval_name]['best_value']):
-                                metric_logger_dict[eval_name]['best_step'] = global_step
-                                metric_logger_dict[eval_name]['best_value'] = metric['video_rsum']
-
-                            best_step = metric_logger_dict[eval_name]['best_step']
-                            TB_LOGGER.log_scaler_dict({f"eval/{eval_name}/test_{k}": v
-                                                for k, v in metric.items() if not isinstance(v,str)})
-                            LOGGER.info(f"====-evaluation--{eval_name}=====step {global_step}--==========\n")
-                            LOGGER.info(metric)
-                            LOGGER.info(f"======evaluation--{eval_name}====history best step: {best_step}==\n")
-                            LOGGER.info(metric_logger_dict[eval_name][str(best_step)])
+                                best_step = metric_logger_dict[eval_name]['best_step']
+                                TB_LOGGER.log_scaler_dict({f"eval/{eval_name}/test_{k}": v
+                                                    for k, v in metric.items()})
+                                LOGGER.info(f"====-evaluation--{eval_name}=====step {global_step}--==========\n")
+                                LOGGER.info(metric)
+                                LOGGER.info(f"======evaluation--{eval_name}====history best step: {best_step}==\n")
+                                LOGGER.info(metric_logger_dict[eval_name][str(best_step)])
                             
 
-                        
+                        # if eval_multiple_choice_vqa:
+                        #     if accuracy >= test_MCQA_acc_best:
+                        #         test_MCQA_acc_best = accuracy
+                        #         test_MCQA_acc_best_iteration = global_step
+
+                        #     LOGGER.info(
+                        #     f"==============    test_iteration{global_step}  ==============\n"
+                        #     f"test_MCQA_acc: {accuracy*100:.2f}")
+                        #     LOGGER.info("=========================================================")
+
+                        #     TB_LOGGER.log_scaler_dict({f"eval/MCQA_test_acc": accuracy})
+                        #     LOGGER.info(
+                        #     f"================================================================\n"
+                        #     f"exp: {opts.output_dir},\n"
+                        #     f"test_MCQA_acc_best: {test_MCQA_acc_best*100:.2f},\n"
+                        #     f"test_MCQA_acc_best_iteration: {test_MCQA_acc_best_iteration}")
+                        #     LOGGER.info("=======================================================")
           
                         model_saver.save(model, global_step)
 
@@ -378,51 +393,43 @@ def main(opts):
 
 
 
-def compute_metric(score_matrix, ids, ids_txt):
-    #ipdb.set_trace()
-    assert score_matrix.shape == (len(ids_txt),len(ids))
+def compute_metric(score_matrix):
     # video retrieval
-    indice_matrix_1 = score_matrix.sort(dim=-1,descending=True)[1].tolist()
-    rank = []
-    for i in range(len(ids_txt)):
-        gt_indice = ids.index(ids_txt[i])
-        rank.append(indice_matrix_1[i].index(gt_indice))
-    
-    rank = torch.tensor(rank).to(score_matrix)
-    
-    vr_r1 = (rank < 1).sum().item() / len(ids_txt)
-    vr_r5 = (rank < 5).sum().item() / len(ids_txt)
-    vr_r10 = (rank < 10).sum().item() / len(ids_txt)
-    v_medianR = torch.median(rank).item() +1
+
+    size = len(score_matrix)
+    _, rank_txt = score_matrix.topk(size, dim=1)
+    gt_video = torch.arange(size).long().to(rank_txt.device).unsqueeze(1).expand_as(rank_txt)
+    rank = (rank_txt == gt_video).nonzero()[:,1]
+    vr_r1 = (rank < 1).sum().item() / size
+    vr_r5 = (rank < 5).sum().item() / size
+    vr_r10 = (rank < 10).sum().item() / size
+    v_medianR = torch.median(rank) +1
 
 
-
-    # text retrieval
- 
-    
-    indice_matrix_2 = score_matrix.sort(dim=0,descending=True)[1].permute(1,0).tolist()
-    rank = []
-    for i in range(len(ids)):
-        gt_indices=[]
-        for idx, id in enumerate(ids_txt):
-            if id == ids[i]:
-                gt_indices.append(idx)
-
-        rank.append(min([indice_matrix_2[i].index(idx) for idx in gt_indices]))
-    
-    rank = torch.tensor(rank).to(score_matrix)
-    
-    tr_r1 = (rank < 1).sum().item() / len(ids)
-    tr_r5 = (rank < 5).sum().item() / len(ids)
-    tr_r10 = (rank < 10).sum().item() / len(ids)
-    t_medianR = torch.median(rank).item() +1
-
-    eval_log = {'video_recall': f'{round(vr_r1*100,1)}/{round(vr_r5*100,1)}/{round(vr_r10*100,1)}',
+    eval_log = {'video_r1': round(vr_r1*100,1),
+                'video_r5': round(vr_r5*100,1),
+                'video_r10': round(vr_r10*100,1),
                 'video_rsum': round((vr_r1 + vr_r5 + vr_r10)*100,1), 
-                'video_medianR': v_medianR,
-                'txt_recall': f'{round(tr_r1*100,1)}/{round(tr_r5*100,1)}/{round(tr_r10*100,1)}',
-                'txt_rsum': round((tr_r1 + tr_r5 + tr_r10)*100,1), 
-                'txt_medianR': t_medianR}
+                'video_medianR': v_medianR}
+
+    # # text retrieval
+ 
+    # _, rank_video = score_matrix.topk(size, dim=0)
+    # gt_video = torch.arange(size).long().to(rank_txt.device).unsqueeze(0).expand_as(rank_video)
+    # rank = (rank_video == gt_video).nonzero()[:,0]  
+    # tr_r1 = (rank < 1).sum().item() / size
+    # tr_r5 = (rank < 5).sum().item() / size
+    # tr_r10 = (rank < 10).sum().item() / size
+    # t_medianR = torch.median(rank) +1
+
+    # eval_log = {'txt_r1': tr_r1,
+    #             'txt_r5': tr_r5,
+    #             'txt_r10': tr_r10,
+    #             'txt_medianR': t_medianR,
+    #             'video_r1': vr_r1,
+    #             'video_r5': vr_r5,
+    #             'video_r10': vr_r10,
+    #             'video_medianR': v_medianR}
     return eval_log
 
 
@@ -439,11 +446,8 @@ def evaluate(model, val_loader):
     video_feature = []
     audio_feature = []
     va_feature = []
-    ids = []
-    ids_txt = []
 
     for i, batch in enumerate(val_loader):
-        #ipdb.set_trace()
         evaluation_dict = model(batch, compute_loss=False)
         feat_t = evaluation_dict['feat_t']
         feat_v = evaluation_dict['feat_v']
@@ -456,10 +460,6 @@ def evaluate(model, val_loader):
         else:
             feat_va = feat_v
         va_feature.append(feat_va)
-        ids += batch['batch_3m']['ids']
-        ids += batch['batch_2m']['ids']
-        ids_txt += batch['batch_3m']['ids_txt']
-        ids_txt += batch['batch_2m']['ids_txt']
                 
     txt_feature = torch.cat(txt_feature, dim = 0)
     video_feature = torch.cat(video_feature, dim = 0)
@@ -468,14 +468,13 @@ def evaluate(model, val_loader):
     all_txt_feature = hvd.allgather(txt_feature)
     all_video_feature = hvd.allgather(video_feature)
     all_va_feature = hvd.allgather(va_feature)
-    all_ids = [j for i in all_gather_list(ids) for j in i]
-    all_ids_txt = [j for i in all_gather_list(ids_txt) for j in i]
+
     if hvd.rank()==0:
         score_matrix_tv = torch.matmul(all_txt_feature, all_video_feature.permute(1,0))
-        eval_log_tv = compute_metric(score_matrix_tv, all_ids, all_ids_txt)
+        eval_log_tv = compute_metric(score_matrix_tv)
 
         score_matrix_t_va = torch.matmul(all_txt_feature, all_va_feature.permute(1,0))
-        eval_log_t_va = compute_metric(score_matrix_t_va, all_ids, all_ids_txt)
+        eval_log_t_va = compute_metric(score_matrix_t_va)
 
         eval_log = {'tv': eval_log_tv, 't_va':eval_log_t_va}
     else:
@@ -645,9 +644,6 @@ if __name__ == "__main__":
     parser.add_argument('--use_dualsoftmax', type=str2bool, default=False,
                         help="random seed for initialization")
 
-    parser.add_argument('--data_type', type=str, default=None,
-                        help="random seed for initialization")
-
     parser.add_argument('--contra_sync', type=str2bool, default=False,
                         help="random seed for initialization")
 
@@ -698,10 +694,6 @@ if __name__ == "__main__":
     parser.add_argument('--average_audio_mode', type=str, default=None,
                         help="random seed for initialization")
     parser.add_argument('--audio_encoder_weights', type=str, default=None,
-                        help="random seed for initialization")
-    parser.add_argument('--return_all_text', type=str2bool, default=False,
-                        help="random seed for initialization")
-    parser.add_argument('--video_aug', type=str, default=None,
                         help="random seed for initialization")
     args = parse_with_config(parser)
 

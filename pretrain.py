@@ -136,7 +136,6 @@ def main(opts):
     #del(checkpoint)
     # make sure every process has same model parameters in the beginning
     LOGGER.info("broadcast_tensors")
-
     broadcast_tensors([p.data for p in model.parameters()], 0)
     #set_dropout(model, opts.dropout)
 
@@ -167,7 +166,8 @@ def main(opts):
 
     grad_norm = 0
 
-
+    start = time()
+    time_start = time()
     # quick hack for amp delay_unscale bug
     optimizer.zero_grad()
     optimizer.step()
@@ -178,14 +178,12 @@ def main(opts):
     if opts.only_eval:
         return 
 
-    for step, (name, batch) in enumerate(meta_loader):
 
+    for step, (name, batch) in enumerate(meta_loader):
+        
         
         task = name.split('--')[0]
         loss_dict = model(batch, task=task, compute_loss=True)
-        
-
-
         loss = sum(list(loss_dict.values()))
         loss_dict['total_loss'] = loss
         loss_dict = {k:v.item() for k,v in loss_dict.items()}
@@ -255,14 +253,10 @@ def main(opts):
 
             TB_LOGGER.step()
 
-
         if global_step >= opts.num_train_steps:
             break
         
-    if opts.use_validate:
-        validate(model, val_dataloaders, opts, global_step = global_step)
-        model_saver.save(model, global_step, optimizer)
-
+        
 
 
 def str2bool(b):
