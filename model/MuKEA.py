@@ -7,8 +7,9 @@ import torch.nn.functional as F
 from torch.nn import init
 from transformers import LxmertConfig, LxmertTokenizer, LxmertModel
 
-from attention import MultiHeadAttention, attention
-from MuKEA_contrastive_loss import gumbel_softmax
+# from attention import MultiHeadAttention, attention
+# from MuKEA_contrastive_loss import gumbel_softmax
+from utils.MuKEA_contrastive_loss import gumbel_softmax
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 config = LxmertConfig.from_pretrained('../../pretrained_models/unc-nlp/lxmert-base-uncased', output_attentions=True)

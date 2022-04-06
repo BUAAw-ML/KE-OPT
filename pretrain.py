@@ -311,7 +311,7 @@ if __name__ == "__main__":
 
 
     # training parameters
-    parser.add_argument("--train_batch_size", default=4096, type=int,
+    parser.add_argument("--train_batch_size", default=1024, type=int,
                         help="Total batch size for training. "
                              "(batch by tokens)")
     parser.add_argument("--val_batch_size", default=4096, type=int,

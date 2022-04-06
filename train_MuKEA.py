@@ -16,16 +16,35 @@ from math import fabs
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import LxmertTokenizer
+# from transformers import LxmertTokenizer
 
-from MuKEA_contrastive_loss import ContrastiveLoss, l2_sim
-from MuKEA_dataset import KgDataset, my_collate_pretrain, PretrainDataset, my_collate
-from MuKEA_dataset import vocab_num
-from MuKEA_dataset_val import KgDatasetVal
-from MuKEA_model import KgPreModel, tokenizer
+from utils.MuKEA_contrastive_loss import ContrastiveLoss, l2_sim
+from data.MuKEA_dataset import KgDataset, my_collate_pretrain, PretrainDataset, my_collate
+from data.MuKEA_dataset import vocab_num
+from data.MuKEA_dataset_val import KgDatasetVal
+from model.MuKEA_model import KgPreModel, tokenizer
 from transformers import get_linear_schedule_with_warmup
 
 import argparse
+
+parser = argparse.ArgumentParser()
+# parser.add_argument("--inference", action="store_true", help='complete dataset or not')
+parser.add_argument("--pretrain", action="store_true", help='use vqa2.0 or not')
+parser.add_argument('--batch_size', type=int, default=256,
+                    help='minibatch size')
+parser.add_argument('--num_epochs', type=int, default=200,
+                    help='number of epochs')
+parser.add_argument('--model_dir', type=str, default='model_file_path/',
+                    help='model file path')
+parser.add_argument("--load_pthpath", default="",
+                    help="To continue training, path to .pth file of saved checkpoint.")
+parser.add_argument("--validate", action="store_true", help="Whether to validate on val split after every epoch.")
+parser.add_argument("--embedding", action="store_true", help="Whether to train tail embedding.")
+parser.add_argument("--accumulate", action="store_true", help="Whether to fine-tune.")
+parser.add_argument("--dataset", default="vqav2", help="dataset that model training on")
+parser.add_argument('--local_rank', default=-1, type=int,
+                    help='node rank for distributed training')
+args = parser.parse_args()
 
 # dist.init_process_group(backend='nccl')
 # torch.cuda.set_device(args.local_rank)
@@ -107,7 +126,7 @@ def cal_acc(ground_truth, preds, return_id = False):
         return acc_num / all_num
 
 
-def train(args):
+def train():
     if not args.pretrain:
         train_dataset = KgDataset(val=False)
         train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True,
@@ -330,24 +349,4 @@ def train(args):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    # parser.add_argument("--inference", action="store_true", help='complete dataset or not')
-    parser.add_argument("--pretrain", action="store_true", help='use vqa2.0 or not')
-    parser.add_argument('--batch_size', type=int, default=256,
-                        help='minibatch size')
-    parser.add_argument('--num_epochs', type=int, default=200,
-                        help='number of epochs')
-    parser.add_argument('--model_dir', type=str, default='contrasloss_check_v11/',
-                        help='model file path')
-    parser.add_argument("--load_pthpath", default="",
-                        help="To continue training, path to .pth file of saved checkpoint.")
-    parser.add_argument("--validate", action="store_true", help="Whether to validate on val split after every epoch.")
-    parser.add_argument("--embedding", action="store_true", help="Whether to train tail embedding.")
-    parser.add_argument("--accumulate", action="store_true", help="Whether to fine-tune.")
-    parser.add_argument("--dataset", default="okvqa", help="dataset that model training on")
-    parser.add_argument('--local_rank', default=-1, type=int,
-                        help='node rank for distributed training')
-    args = parser.parse_args()
-
-
-    train(args)
+    train()
