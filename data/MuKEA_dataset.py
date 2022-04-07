@@ -15,6 +15,7 @@ import MuKEA
 
 # import model.MuKEA import tokenizer
 from random import sample
+import config.MuKEA
 
 # with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_train.pickle', 'rb') as f:
 #     pretrain_feature = pickle.load(f)
@@ -26,54 +27,53 @@ from random import sample
 #         exit()
 
 
-# if args.dataset == 'krvqa':
-#     if args.pretrain:
-#         with open('data/vqa_train_filter.json','r') as f:
-#             vqa2 = json.load(f)
-#         train_row = vqa2
-#         with open('data/vqa_img_feature_train.pickle', 'rb') as f:
-#             pretrain_feature = pickle.load(f)
-#     else:
-#         with open('data/kr-vqa/krvqa_img_feature_train.pickle', 'rb') as f:
-#             pretrain_feature = pickle.load(f)
-#         with open('data/kr-vqa/krvqa_train.json','r') as f:
-#             train_row = json.load(f)
-#     if args.accumulate:
-#         with open('data/krvqa-pretrain_dic_all_filter.pickle', 'rb') as f:
-#             a_dic = pickle.load(f)
-#     else:
-#         with open('data/kr-vqa/krvqa-ans_dic.pickle', 'rb') as f:
-#             a_dic = pickle.load(f)
-# elif args.dataset == 'okvqa':
-#     with open('data/vqa_img_feature_train.pickle', 'rb') as f:
-#         pretrain_feature = pickle.load(f)
-#     if args.pretrain:
-#         with open('data/vqa_train_filter.json','r') as f:
-#             vqa2 = json.load(f)
-#         train_row = vqa2
-#     else:
-#         with open('data/okvqa_train.json','r') as f:
-#             train_row = json.load(f)
-#     if args.accumulate:
-#         with open('data/pretrain_dic_all_filter.pickle', 'rb') as f:
-#             a_dic = pickle.load(f)
-#     else:
-#         with open('data/ans_dic.pickle', 'rb') as f:
-#             a_dic = pickle.load(f)
-# elif args.dataset == 'vqav2':
-
-with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_train.pickle', 'rb') as f:
-    pretrain_feature = pickle.load(f)
-with open('./datasets/mukea_data/vqa_train.json','r') as f:
-    train_row = json.load(f)
-with open('./datasets/mukea_data/vqav2/vqav2_dic_all.pickle', 'rb') as f:
-    a_dic = pickle.load(f)
-with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_val.pickle', 'rb') as f:
-    pretrain_feature_val = pickle.load(f)
-with open('./datasets/mukea_data/vqa_val.json','r') as f:
-    val_row = json.load(f)
-pretrain_feature.update(pretrain_feature_val)
-train_row.update(val_row)
+    if args.dataset == 'krvqa':
+        if args.pretrain:
+            with open('data/vqa_train_filter.json','r') as f:
+                vqa2 = json.load(f)
+            train_row = vqa2
+            with open('data/vqa_img_feature_train.pickle', 'rb') as f:
+                pretrain_feature = pickle.load(f)
+        else:
+            with open('data/kr-vqa/krvqa_img_feature_train.pickle', 'rb') as f:
+                pretrain_feature = pickle.load(f)
+            with open('data/kr-vqa/krvqa_train.json','r') as f:
+                train_row = json.load(f)
+        if args.accumulate:
+            with open('data/krvqa-pretrain_dic_all_filter.pickle', 'rb') as f:
+                a_dic = pickle.load(f)
+        else:
+            with open('data/kr-vqa/krvqa-ans_dic.pickle', 'rb') as f:
+                a_dic = pickle.load(f)
+    elif args.dataset == 'okvqa':
+        with open('data/vqa_img_feature_train.pickle', 'rb') as f:
+            pretrain_feature = pickle.load(f)
+        if args.pretrain:
+            with open('data/vqa_train_filter.json','r') as f:
+                vqa2 = json.load(f)
+            train_row = vqa2
+        else:
+            with open('data/okvqa_train.json','r') as f:
+                train_row = json.load(f)
+        if args.accumulate:
+            with open('data/pretrain_dic_all_filter.pickle', 'rb') as f:
+                a_dic = pickle.load(f)
+        else:
+            with open('data/ans_dic.pickle', 'rb') as f:
+                a_dic = pickle.load(f)
+    elif args.dataset == 'vqav2':
+        with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_train.pickle', 'rb') as f:
+            pretrain_feature = pickle.load(f)
+        with open('./datasets/mukea_data/vqa_train.json','r') as f:
+            train_row = json.load(f)
+        with open('./datasets/mukea_data/vqav2/vqav2_dic_all.pickle', 'rb') as f:
+            a_dic = pickle.load(f)
+        with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_val.pickle', 'rb') as f:
+            pretrain_feature_val = pickle.load(f)
+        with open('./datasets/mukea_data/vqa_val.json','r') as f:
+            val_row = json.load(f)
+        pretrain_feature.update(pretrain_feature_val)
+        train_row.update(val_row)
 
 
 vocab_num = len(a_dic)
@@ -117,18 +117,18 @@ for qid, item in train_row.items():
  
 
     # multi-answer
-    # if args.dataset == 'okvqa':
-    #     answers.append(item['multi_answers'])
-    #     m_ans_id = [a_dic.get(i, 0) for i in item['multi_answers']]
-    #     most_answer_ids.append(m_ans_id)
-    # # most_answer.append(answer_embedding[0])
+    if args.dataset == 'okvqa':
+        answers.append(item['multi_answers'])
+        m_ans_id = [a_dic.get(i, 0) for i in item['multi_answers']]
+        most_answer_ids.append(m_ans_id)
+    # most_answer.append(answer_embedding[0])
 
 
     # #single answer
-    # else:
-    answers.append(item['answer'])
-    most_ans_id = a_dic.get(item['answer'], 0)
-    most_answer_ids.append([most_ans_id])
+    else:
+        answers.append(item['answer'])
+        most_ans_id = a_dic.get(item['answer'], 0)
+        most_answer_ids.append([most_ans_id])
     # else:
     #     most_ans_id = a_dic[most_ans]
 

@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 from dataset import a_dic
-from model import tokenizer
+# from model import tokenizer
 from config import args
 from random import sample
 
