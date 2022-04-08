@@ -18,11 +18,14 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 # from transformers import LxmertTokenizer
 
+
+from MuKEA_config import args
+from model.MuKEA import KgPreModel, tokenizer
 from utils.MuKEA_contrastive_loss import ContrastiveLoss, l2_sim
-from data.MuKEA_dataset import KgDataset, my_collate_pretrain, PretrainDataset, my_collate
-from data.MuKEA_dataset import vocab_num
-from data.MuKEA_dataset_val import KgDatasetVal
-from model.MuKEA_model import KgPreModel, tokenizer
+from MuKEA_dataset import KgDataset, my_collate_pretrain, PretrainDataset, my_collate
+from MuKEA_dataset import vocab_num
+from MuKEA_dataset_val import KgDatasetVal
+
 from transformers import get_linear_schedule_with_warmup
 
 
@@ -129,8 +132,8 @@ def train():
     model = KgPreModel(vocab_num)
     model = model.to(device)
     if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        device_ids = [0, 1]
+        # print("Let's use", torch.cuda.device_count(), "GPUs!")
+        device_ids = [0, 1, 2, 3]
         model = torch.nn.DataParallel(model, device_ids=device_ids)
 
 

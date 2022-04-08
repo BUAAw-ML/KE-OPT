@@ -8,9 +8,10 @@ import json
 import numpy as np
 import torch
 
-from dataset import a_dic
+from MuKEA_dataset import a_dic
 # from model import tokenizer
-from config import args
+
+from MuKEA_config import args
 from random import sample
 
 if args.dataset == 'krvqa':
@@ -24,9 +25,9 @@ elif args.dataset == 'okvqa':
     with open('data/vqa_img_feature_val.pickle', 'rb') as f:
         pretrain_feature = pickle.load(f)
 elif args.dataset == 'vqav2':
-    with open('data/vqa_img_feature_test_dev.pickle', 'rb') as f:
+    with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_val.pickle', 'rb') as f:
         pretrain_feature = pickle.load(f)
-    with open('data/vqa_test.json','r') as f:
+    with open('./datasets/mukea_data/vqa_val.json','r') as f:
         val_row = json.load(f)
 
 def plural(word):
