@@ -28,6 +28,14 @@ from MuKEA_dataset_val import KgDatasetVal
 
 from transformers import get_linear_schedule_with_warmup
 
+import csv
+n=[["路飞","男",100],["索隆","男",99],["娜美","女",90]]
+b=["姓名","性别","分数"]
+with open("123.csv",'w',newline='') as t:#numline是来控制空的行数的
+    writer=csv.writer(t)#这一步是创建一个csv的写入器
+    writer.writerow(b)#写入标签
+    writer.writerows(n)#写入样本数据
+exit()
 
 
 # dist.init_process_group(backend='nccl')
