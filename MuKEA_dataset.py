@@ -48,20 +48,20 @@ if args.dataset == 'krvqa':
         with open('data/kr-vqa/krvqa-ans_dic.pickle', 'rb') as f:
             a_dic = pickle.load(f)
 elif args.dataset == 'okvqa':
-    with open('data/vqa_img_feature_train.pickle', 'rb') as f:
+    with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_train.pickle', 'rb') as f:
         pretrain_feature = pickle.load(f)
     if args.pretrain:
-        with open('data/vqa_train_filter.json','r') as f:
+        with open('./datasets/mukea_data/vqa_train_filter.json','r') as f:
             vqa2 = json.load(f)
         train_row = vqa2
     else:
-        with open('data/okvqa_train.json','r') as f:
+        with open('./datasets/mukea_data/okvqa_train.json','r') as f:
             train_row = json.load(f)
     if args.accumulate:
-        with open('data/pretrain_dic_all_filter.pickle', 'rb') as f:
+        with open('./datasets/mukea_data/pretrain_dic_all_filter.pickle', 'rb') as f:
             a_dic = pickle.load(f)
     else:
-        with open('data/ans_dic.pickle', 'rb') as f:
+        with open('./datasets/mukea_data/ans_dic.pickle', 'rb') as f:
             a_dic = pickle.load(f)
 elif args.dataset == 'vqav2':
     with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_train.pickle', 'rb') as f:
@@ -107,8 +107,6 @@ neg_answer = []
 
 
 
-n = 0
-
 
 for qid, item in train_row.items():
     
@@ -121,7 +119,7 @@ for qid, item in train_row.items():
  
 
     # multi-answer
-    if args.dataset == 'okvqa':
+    if args.dataset != 'krvqa':
         answers.append(item['multi_answers'])
         m_ans_id = [a_dic.get(i, 0) for i in item['multi_answers']]
         most_answer_ids.append(m_ans_id)
@@ -158,12 +156,12 @@ class KgDataset(Dataset):
         image_feature = pretrain_feature[self.image_ids[index]]['feats']
         spatial_feature = pretrain_feature[self.image_ids[index]]['sp_feats']
         most_id = self.most_answer_ids[index]
-        return qid, question, answer, image_feature, spatial_feature, most_id
+        return qid, question, answer, image_feature, spatial_feature, most_id, self.image_ids[index]
 
 def my_collate(batch):
     batch = list(zip(*batch))
     res = {'id': batch[0], 'ques': batch[1], 'ans': batch[2],
-            'img': batch[3], 'spatial': batch[4],'mostid':batch[5]}
+            'img': batch[3], 'spatial': batch[4],'mostid':batch[5], 'image_id':batch[6]}
     del batch
     return res
 

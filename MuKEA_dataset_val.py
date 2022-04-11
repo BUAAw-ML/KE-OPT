@@ -20,9 +20,9 @@ if args.dataset == 'krvqa':
     with open('data/kr-vqa/krvqa_img_feature_test.pickle', 'rb') as f:
         pretrain_feature = pickle.load(f)
 elif args.dataset == 'okvqa':
-    with open('data/okvqa_val.json','r') as f:
+    with open('./datasets/mukea_data/okvqa_val.json','r') as f:
         val_row = json.load(f)
-    with open('data/vqa_img_feature_val.pickle', 'rb') as f:
+    with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_val.pickle', 'rb') as f:
         pretrain_feature = pickle.load(f)
 elif args.dataset == 'vqav2':
     with open('./datasets/coco/mscoco_imgfeat/vqa_img_feature_val.pickle', 'rb') as f:

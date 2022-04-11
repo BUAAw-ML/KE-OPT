@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '5'
 import pickle
 import random
 import torch
@@ -29,6 +30,7 @@ from MuKEA_dataset_val import KgDatasetVal
 from transformers import get_linear_schedule_with_warmup
 
 import csv
+
 
 
 
@@ -96,14 +98,6 @@ def cal_acc_multi(ground_truth, preds, return_id = False):
    
 def cal_acc(ground_truth, preds, return_id = False):
 
-    n=[["路飞","男",100],["索隆","男",99],["娜美","女",90]]
-    b=["姓名","性别","分数"]
-    with open("123.csv",'w',newline='') as t:#numline是来控制空的行数的
-        writer=csv.writer(t)#这一步是创建一个csv的写入器
-        writer.writerow(b)#写入标签
-        writer.writerows(n)#写入样本数据
-    exit()
-
     all_num = len(ground_truth)
     acc_num = 0
     ids = []
@@ -115,11 +109,32 @@ def cal_acc(ground_truth, preds, return_id = False):
         for aid in answer_id:
             if pred == aid:
                 acc_num += 1
+
     if return_id:
         return acc_num / all_num, ids
     else:
         return acc_num / all_num
 
+
+def save_KG(ground_truth, preds, image_ids):
+
+    b=["id","value","category","label","info"]
+    nodeFile =  open("node.csv",'w',newline='')#numline是来控制空的行数的
+    writer_nodeFile=csv.writer(nodeFile)#这一步是创建一个csv的写入器
+    writer_nodeFile.writerow(b)#写入标签
+    b=["source","target","label"]
+    edgeFile =  open("edge.csv",'w',newline='')#numline是来控制空的行数的
+    writer_edgeFile=csv.writer(edgeFile)#这一步是创建一个csv的写入器
+    writer_edgeFile.writerow(b)#写入标签
+
+    for i, answer_id in enumerate(ground_truth):
+        pred = preds[i]
+
+        writer_nodeFile.writerow([int(image_ids[i].split("_")[-1]),0,0,0,0])
+        writer_nodeFile.writerow([pred.item()+10000000,0,1,0,0])
+        writer_edgeFile.writerow([int(image_ids[i].split("_")[-1]),pred.item()+10000000,0])
+    nodeFile.close()
+    edgeFile.close()
 
 def train():
     if not args.pretrain:
@@ -143,9 +158,8 @@ def train():
     model = KgPreModel(vocab_num)
     model = model.to(device)
     if torch.cuda.device_count() > 1:
-        # print("Let's use", torch.cuda.device_count(), "GPUs!")
-        device_ids = [0, 1, 2, 3]
-        model = torch.nn.DataParallel(model, device_ids=device_ids)
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        model = torch.nn.DataParallel(model)#, device_ids=device_ids)
 
 
     optimizer = optim.AdamW(model.parameters(), lr=1e-4)
@@ -187,6 +201,7 @@ def train():
         train_preds_trip = []
         train_preds_trip_3 = []
         train_answers_trip = []
+        
         for batch_data in tqdm(train_dataloader):
             visual_faetures = torch.tensor(batch_data['img']).float().to(device)
             source_seq = tokenizer(batch_data['ques'], padding=True, return_tensors="pt",
@@ -260,13 +275,16 @@ def train():
                     train_preds_trip.append(trip_predict[i])
                     train_preds_trip_3.append(trip_predict_3[i])
                     train_answers_trip.append(most_id[i])
+                    
 
         # train_acc_1 = cal_acc_old(train_answers, train_preds)
         if args.dataset == 'krvqa':
+            print("cal_acc")
             train_acc_1_trip = cal_acc(train_answers_trip, train_preds_trip)
             print('epoch %d train_loss = %.1f, acc_trip = %.4f' % (epoch, loss_stat,
-                                                                          train_acc_1_trip))
+                                                                            train_acc_1_trip))
         else:
+            print("cal_acc_multi")
             # train_acc_1_ce = cal_acc_old(train_answers, train_preds)
             train_acc_1_trip = cal_acc_multi(train_answers_trip, train_preds_trip)
             print('epoch %d train_loss = %.1f, acc_trip = %.4f' % (epoch, loss_stat,
@@ -283,6 +301,7 @@ def train():
             preds_trip = []
             preds_trip_3 = []
             answers_trip = []
+            image_ids = []
             print(f"\nValidation after epoch {epoch}:")
             for i, batch_data in enumerate(tqdm(test_dataloader)):
                 with torch.no_grad():
@@ -295,6 +314,7 @@ def train():
                     spatial_feature = torch.tensor(batch_data['spatial']).float().to(device)
                     # most = torch.tensor(batch_data['most']).to(device)
                     most_id = batch_data['mostid']
+                    image_id = batch_data['image_id']
 
 
                     anchor = model(input_id, attention_mask, token_type_ids, visual_faetures, spatial_feature)
@@ -319,6 +339,7 @@ def train():
                         preds_trip.append(trip_predict[i])
                         preds_trip_3.append(trip_predict_3[i])
                         answers_trip.append(most_id[i])
+                        image_ids.append(image_id[i])
 
             # acc_1 = cal_acc_old(answers, preds)
             if args.dataset == 'krvqa':
